@@ -13,7 +13,7 @@ import torch.utils.data as Data
 from private_modules import load_yaml_config
 from private_modules.Torch import MCFDS
 from scipy import interpolate
-from .utils import read_mat_file
+from .utils import read_mat_file, get_ref_interval
 
 
 # class WESTDS(Data.IterableDataset):
@@ -98,8 +98,16 @@ from .utils import read_mat_file
 
 
 class StdWESTShotDS(MCFDS.__BaseH5__):
+    def get_discharge_interval(self, h5_file):
+        start_idx, end_idx = get_ref_interval(h5_file)
+        start_idx = start_idx + 1000
+        end_idx = end_idx - 200
+        return start_idx, end_idx
+
     def get_h5_data(self, h5_file):
         data_dict = read_mat_file(h5_file, self.nodes)
+        start_idx, end_idx = self.get_discharge_interval(h5_file)
+        # the real start point.
         node_data_list = []
         shot_node_flags = []
         info = dict({})
@@ -116,13 +124,14 @@ class StdWESTShotDS(MCFDS.__BaseH5__):
                     posinf=inf_value,
                     neginf=-inf_value,)
                 shot_node_flags.append(1)
-            node_data = np.array(node_data)[:, np.newaxis]
+            node_data = np.array(node_data)[start_idx:end_idx, np.newaxis]
             node_data_list.append(node_data)
         shot_data = np.concatenate(
             node_data_list, 
             dtype=self.dtype, axis=1)
         shot_len = shot_data.shape[0]
         info['file_name'] = h5_file
+        info['time_axis'] = time_axis[start_idx:end_idx]
         return shot_data, shot_len, shot_node_flags, info
 
     def callback(self, data):
@@ -152,6 +161,6 @@ class H5GenDataLoader(MCFDS.H5GenDL):
                 'pin_memory', False),
             prefetch_factor=2,
             persistent_workers=True,
-            timeout=300,
+            timeout=self.kwargs.get('timeout', 300),
         )
         return dl
