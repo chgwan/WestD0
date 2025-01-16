@@ -27,15 +27,18 @@ def read_mat_file(mat_file: os.PathLike, nodes):
     return node_stat_dict
 
 
-def get_ref_start(mat_file):
-    data_dict = read_mat_file(mat_file, 'Ip_scope_0')
+def get_ref_interval(mat_file):
+    data_dict = read_mat_file(mat_file, ['Ip_scope_0'])
     Ip_ref_data = data_dict['Ip_scope_0']
     eps = 1e-5
     set_value = 1.0
     ids = Ip_ref_data > (set_value + eps)
     start_idx = np.min(np.arange(len(Ip_ref_data))[ids])
     start_idx = start_idx - 1
-    return start_idx
+    end_idx = len(Ip_ref_data)
+    return start_idx, end_idx
+
+
 
 def get_shots(stat_file):
     df = pd.read_csv(stat_file, index_col=0)
@@ -55,7 +58,17 @@ def calc_loss_MLP(
 ):
     loss_fn = tools.MaskedMSELoss(reduction='mean')
     Y_hat = model(X)
-    loss = loss_fn(Y_hat, Y, None, batch_output_flags)
+    loss = loss_fn(Y_hat, Y, None, None)
+    # print(loss)
+    # print(X.shape)
+    # print(Y)
     if torch.isnan(loss).any().item():
         raise ValueError(f"Nan in loss")
     return loss
+
+
+
+if __name__ == "__main__":
+    mat_file = "/home/chenguang.wan/DATABASE/DataBase/WEST/PCS/DCS_archive_57396.mat"
+    start_idx = get_ref_interval(mat_file)
+    print(start_idx)
