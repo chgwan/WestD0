@@ -3,27 +3,8 @@ import numpy as np
 from scipy.io import loadmat
 import pathlib
 import os
-# from private_modules import load_yaml_config
-import yaml 
+from private_modules import load_yaml_config
 import pandas as pd
-
-def load_yaml_config(file_path):
-    """
-    Load a YAML configuration file.
-
-    Args:
-        file_path (str): The path of yaml configuration file.
-
-    Returns:
-        Dict. The configuration information in dict format.
-
-    Supported Platforms:
-        ``Ascend`` ``CPU`` ``GPU``
-    """
-    # Read YAML experiment definition file
-    with open(file_path, 'r') as stream:
-        config = yaml.safe_load(stream)
-    return config
 
 mat_data_dir = '/donnees/NTU/NTU'
 
