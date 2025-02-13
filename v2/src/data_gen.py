@@ -10,6 +10,7 @@
 from private_modules.Torch import MCFDS
 import numpy as np
 from torch.utils import data as Data
+import h5py
 
 class StdWESTShotDS(MCFDS.MCFShotDataSet):
     def __init__(self, 
@@ -21,6 +22,46 @@ class StdWESTShotDS(MCFDS.MCFShotDataSet):
                  **kwargs):
         super().__init__(h5_list, input_nodes, output_nodes, dtype=dtype, **kwargs)
     
+    def get_h5_data(self, h5_file):
+        nodes = self.nodes
+        dtype = self.dtype
+        info = dict({})
+        with h5py.File(h5_file, mode="r") as hf:
+            times = hf["time"][()]
+            timeAxis = hf["time"][()]
+            timeLen = len(timeAxis)
+            # data:np.ndarray = np.empty((timeLen, 0), dtype=dtype)
+            data = []
+            node_flags = []
+            for node in nodes:
+                # col = db[node]
+                # nodeDict = col.find_one({"shot":shot})
+                # `Node` means inexistence.
+                if hf[node].shape is None or len(np.unique(hf[node][()])):
+                    nodeData = np.zeros_like(timeAxis, dtype=dtype)
+                    node_flags.append(0)
+                else:
+                    node_flags.append(1)
+                    nodeData = hf[node][()]
+                    inf_value = 3.2e32
+                    nodeData = np.nan_to_num(
+                        nodeData,
+                        posinf=inf_value,
+                        neginf=-inf_value,)
+                    # if the times lengeh is unsame with nodeData length
+                    assert len(times) == len(nodeData), \
+                        "file: %s, Node:%s" % (h5_file, node)
+                    # nodeData = np.interp(timeAxis, times, nodeData)
+                if len(nodeData.shape) == 1:
+                    nodeData = np.array(nodeData)[:, np.newaxis]
+                # data = np.append(data, nodeData, axis=1)
+                data.append(nodeData)
+            node_flags = np.array(node_flags, dtype=int)
+            # data = np.stack(data, dtype=dtype, axis=1)
+            data = np.concatenate(data, dtype=dtype, axis=1)
+        info['file_name'] = h5_file
+        return data, data.shape[0], node_flags, info
+
     def callback(self, data):
         MS_df = self.kwargs['MS_df']
         means = MS_df.loc['mean', self.nodes].to_numpy()
