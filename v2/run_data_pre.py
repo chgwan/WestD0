@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pathlib
 import os
-from src.utils import merge_mat_h5
+from v2.src.data_utils import merge_mat_h5
 from private_modules.utilities import save_to_file, parse_args, MpRun
 from private_modules.FedData import stat_node
 from tqdm import tqdm
