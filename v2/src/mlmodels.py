@@ -71,9 +71,9 @@ class WestFormer(nn.Module):
         self.enc_embed = EmbedPostion(input_dim,
                                       embed_dim,
                                       window_size=window_size,)
-        self.dec_embed = EmbedPostion(output_dim,
-                                      embed_dim,
-                                      window_size=window_size,)
+        # self.dec_embed = EmbedPostion(output_dim,
+        #                               embed_dim,
+        #                               window_size=window_size,)
         self.trans = nn.Transformer(
             d_model=embed_dim,
             num_encoder_layers=num_layers // 2,
@@ -87,28 +87,30 @@ class WestFormer(nn.Module):
             out_features=output_dim,)
 
     def forward(self, enc_inputs, dec_inputs):
-        if self.training:
-            # Input add noise
-            noise = torch.randn_like(enc_inputs) * self.noise_ratio
-            enc_inputs = ((noise + enc_inputs).detach() -
-                          enc_inputs).detach() + enc_inputs
-            # one-step ahead noise.
-            noise = torch.randn_like(dec_inputs) * self.noise_ratio
-            dec_inputs = ((noise + dec_inputs).detach() -
-                          dec_inputs).detach() + dec_inputs
-
+        # if self.training:
+        #     # Input add noise
+        #     noise = torch.randn_like(enc_inputs) * self.noise_ratio
+        #     enc_inputs = ((noise + enc_inputs).detach() -
+        #                   enc_inputs).detach() + enc_inputs
+        #     # one-step ahead noise.
+        #     noise = torch.randn_like(dec_inputs) * self.noise_ratio
+        #     dec_inputs = ((noise + dec_inputs).detach() -
+        #                   dec_inputs).detach() + dec_inputs
+        # enc_inputs = self.enc_embed(enc_inputs)
+        # dec_inputs = self.dec_embed(dec_inputs)
         enc_inputs = self.enc_embed(enc_inputs)
-        dec_inputs = self.dec_embed(dec_inputs)
-        maxlen = dec_inputs.size(1)
-        # causal_mask = self.trans.generate_square_subsequent_mask(
-        #     maxlen,
-        #     device=enc_inputs.device,)
-        dec_outputs = self.trans(src=enc_inputs,
-                                 tgt=dec_inputs,
-                                #  src_mask=causal_mask,
-                                #  tgt_mask=causal_mask,
-                                 src_is_causal=True,
-                                 tgt_is_causal=True,)
+        maxlen = enc_inputs.size(1)
+        causal_mask = self.trans.generate_square_subsequent_mask(
+            maxlen,
+            device=enc_inputs.device,)
+        # dec_outputs = self.trans(src=enc_inputs,
+        #                          tgt=,
+        #                         #  src_mask=causal_mask,
+        #                         #  tgt_mask=causal_mask,
+        #                          src_is_causal=True,
+        #                          tgt_is_causal=True,)
+        enc_outputs = self.trans.encoder(enc_inputs, causal_mask)
+        dec_outputs = self.trans.decoder(enc_outputs, causal_mask)
         Y_hat = self.restore_layer(dec_outputs)
         return Y_hat
 
