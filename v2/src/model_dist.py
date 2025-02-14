@@ -14,7 +14,8 @@ class ModelTrainRNN(model_tra_dist.ModelTrain):
                     epoch: int,
                     model: Module,
                     train_loader: DataLoader,
-                    optimizer: Any) -> None:
+                    optimizer: Any,
+                    scheduler,) -> None:
         model.train()
         loss_fn = self.loss_fn
         train_steps = len(train_loader) + (train_loader.num_workers - 1)
@@ -43,6 +44,8 @@ class ModelTrainRNN(model_tra_dist.ModelTrain):
                 current_steps += X.size(0)
                 # if world_rank == 0:
                 train_bar.update()
+                if scheduler is not None:
+                    scheduler.step()
         # if world_rank == 0:
         train_bar.close()
         dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)

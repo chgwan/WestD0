@@ -17,7 +17,8 @@ class ModelTuneRNN(model_tra_tune.ModelTune):
                     epoch: int,
                     model: Module,
                     train_loader: DataLoader,
-                    optimizer: Any) -> None:
+                    optimizer: Any,
+                    scheduler: Any) -> None:
         loss_fn = self.loss_fn
         train_steps = len(train_loader) + (train_loader.num_workers - 1)
         train_ds_size = len(train_loader.dataset)
@@ -52,6 +53,8 @@ class ModelTuneRNN(model_tra_tune.ModelTune):
                 current_steps += X.size(0)
                 # if world_rank == 0:
                 train_bar.update()
+                if scheduler is not None:
+                    scheduler.step()                
         # if world_rank == 0:
         train_bar.close()
         # tra_loss = tra_loss / input_num
@@ -81,7 +84,8 @@ class ModelTuneRNN(model_tra_tune.ModelTune):
                 loss = loss_fn(model, X, Y, Y_len, Y_flags,
                                None,
                                **self.kwargs)
-                loss.backward()
+                # here is a trick
+                # loss.backward()
                 # val_loss += loss.detach().item()
                 # val_input_num += X.size(0)
                 # val_input_num += 1
