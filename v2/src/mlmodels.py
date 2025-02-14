@@ -6,6 +6,7 @@ import random
 from typing import Callable, Optional
 import math
 from private_modules.Torch import qkmodels
+from Models import Swin
 
 class FastLSTM(nn.Module):
     def __init__(
@@ -86,7 +87,7 @@ class WestFormer(nn.Module):
             in_features=embed_dim,
             out_features=output_dim,)
 
-    def forward(self, enc_inputs, dec_inputs):
+    def forward(self, enc_inputs):
         # if self.training:
         #     # Input add noise
         #     noise = torch.randn_like(enc_inputs) * self.noise_ratio
@@ -110,7 +111,7 @@ class WestFormer(nn.Module):
         #                          src_is_causal=True,
         #                          tgt_is_causal=True,)
         enc_outputs = self.trans.encoder(enc_inputs, causal_mask)
-        dec_outputs = self.trans.decoder(enc_outputs, causal_mask)
+        dec_outputs = self.trans.decoder(enc_inputs, enc_outputs, causal_mask)
         Y_hat = self.restore_layer(dec_outputs)
         return Y_hat
 
@@ -120,44 +121,45 @@ class WestFormer(nn.Module):
                             dtype=torch.int,
                             device=self.device)[None, :] < valid_len[:, None]
         return ~mask
-    
-    @torch.no_grad()
-    def inference(self, enc_inputs, dec_input):
-        """
-        Args:
-            enc_inputs (Tensor): [batch_size, seq_len, input_size],
-                encoder input of the network
-            dec_inputs (Tensor): [batch_size, 1, output_size],
-                decoder input of the network.
-            state (Tensor): RNN states
-        Returns: model_outputs
-            * model_ouputs (Tensor): [batch_size, seq_len, output_size]
-        """
-        enc_l = enc_inputs.shape[1]
-        enc_inputs = self.enc_embed(enc_inputs)
-        src_mask = self.trans.generate_square_subsequent_mask(
-            enc_l, 
-            device=enc_inputs.device,
-            )
-        enc_outputs = self.trans.encoder(enc_inputs, src_mask)
-        # memory = enc_outputs[:, -1, :]
+
+    # @torch.no_grad()
+    # def inference(self, enc_inputs):
+    #     """
+    #     Args:
+    #         enc_inputs (Tensor): [batch_size, seq_len, input_size],
+    #             encoder input of the network
+    #         dec_inputs (Tensor): [batch_size, 1, output_size],
+    #             decoder input of the network.
+    #         state (Tensor): RNN states
+    #     Returns: model_outputs
+    #         * model_ouputs (Tensor): [batch_size, seq_len, output_size]
+    #     """
+    #     # TODO(Mr.wan): improve to compatible with WestD0 data
+    #     enc_l = enc_inputs.shape[1]
+    #     enc_inputs = self.enc_embed(enc_inputs)
+    #     src_mask = self.trans.generate_square_subsequent_mask(
+    #         enc_l, 
+    #         device=enc_inputs.device,
+    #         )
+    #     enc_outputs = self.trans.encoder(enc_inputs, src_mask)
+    #     # memory = enc_outputs[:, -1, :]
 
         
-        for _ in range(enc_l):
-            tgt_mask = self.trans.generate_square_subsequent_mask(
-                dec_input.size(1),
-                device=dec_input.device)
-            model_input = self.dec_embed(dec_input)
-            model_output = self.trans.decoder(
-                model_input, 
-                memory=enc_outputs, 
-                tgt_mask=tgt_mask)
-            model_output = self.restore_layer(model_output)
-            # print(model_output.size())
-            dec_input = torch.cat([dec_input, model_output[:, -1:, :]], dim=1)
-        # remove the start
-        dec_input = dec_input[:, 1:, :]
-        return dec_input
+    #     for _ in range(enc_l):
+    #         tgt_mask = self.trans.generate_square_subsequent_mask(
+    #             dec_input.size(1),
+    #             device=dec_input.device)
+    #         model_input = self.dec_embed(dec_input)
+    #         model_output = self.trans.decoder(
+    #             model_input, 
+    #             memory=enc_outputs, 
+    #             tgt_mask=tgt_mask)
+    #         model_output = self.restore_layer(model_output)
+    #         # print(model_output.size())
+    #         dec_input = torch.cat([dec_input, model_output[:, -1:, :]], dim=1)
+    #     # remove the start
+    #     dec_input = dec_input[:, 1:, :]
+    #     return dec_input
 
 class WestERT(nn.Module):
     def __init__(
@@ -190,6 +192,26 @@ class WestERT(nn.Module):
             in_features=embed_dim,
             out_features=output_dim,)
 
-
 if __name__ == "__main__":
-    pass
+    batch_size = 1
+    seq_len = int(10 ** 4)
+    input_dim = 19
+    output_dim = 6
+    embed_dim = 512
+
+    input_seq = torch.zeros(batch_size, seq_len, input_dim)
+    tgt_seq = torch.zeros(batch_size, seq_len, output_dim)
+
+
+    model = WestFormer(
+        input_dim,
+        embed_dim,
+        output_dim,
+        window_size=int(5 * 10 ** 4))
+    
+    model.cuda()
+    input_seq = input_seq.cuda()
+
+    
+    output_seq = model(input_seq)
+    print(output_seq.shape)
