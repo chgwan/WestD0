@@ -2,10 +2,11 @@
 import argparse
 import pathlib
 import torch
+import ray
 import os
 
 from src import data_gen
-from src import mlmodel, model_dist
+from src import mlmodels, model_dist, utils
 from private_modules import load_yaml_config, clean_dir, screen_print
 from private_modules.Torch import tools, qkmodels
 from ray import tune
@@ -15,10 +16,16 @@ import time
 import random
 from functools import partial
 
-from v2.src import data_utils
+from torch import optim
+
+def my_OneCycleLR(optimizer, max_lr, total_steps):
+    return optim.lr_scheduler.OneCycleLR(
+        optimizer, 
+        max_lr=max_lr, 
+        total_steps=total_steps)
 
 # add more length mask in the future. 
-@tools.ray_start
+# @tools.ray_start
 def main_run(config, num_samples):
     train_params = config["train"]
     model_params = config["model"]
@@ -38,15 +45,8 @@ def main_run(config, num_samples):
     h5s = list(data_dir.iterdir())
     world_size = torch.cuda.device_count()
 
-    MS_file = stat_f.parent.joinpath('h5_global_MS.csv')
-    MS_df = pd.read_csv(MS_file, index_col=0)
-
-    h5s = list(data_dir.iterdir())
-
-    world_size = torch.cuda.device_count()  # for single node.
-
     # MS_file = data_dir.joinpath('h5_global_MS.csv')
-    MS_file = data_dir.joinpath('h5_global_MS_add.csv')
+    MS_file = stat_f.parent.joinpath('h5_global_MS.csv')
     MS_df = pd.read_csv(MS_file, index_col=0)
 
     input_list = data_params['input_list']
@@ -68,7 +68,7 @@ def main_run(config, num_samples):
     sample_num = data_params['sample_num']
     if type(sample_num) == int:
         h5s = h5s[:sample_num]
-    print(f'{len(h5s)} h5 files input')
+    screen_print(f'{len(h5s)} h5 files input')
 
     shuffle = data_params['shuffle']
     if shuffle:
@@ -79,35 +79,40 @@ def main_run(config, num_samples):
         output_nodes=output_nodes,
         batch_size=data_params['batch_size'] * world_size,
         num_workers=data_params['num_workers'],
-        DS=data_gen.StdMCFShotWinDS,
+        DS=data_gen.StdWESTShotDS,
         MS_df=MS_df,
         stat_df=stat_df,
         pin_memory=True,
         world_size=world_size,
     )
-    data_loaders = my_data_gen.sp_ratio_wz(split_ratio=[0.99, 0.01, 0.001])
+    my_data_gen.set_split_ratio([0.6, 0.2, 0.2])
+    data_loaders = my_data_gen.sp_ratio_wz()
     tra_loaders, val_loaders, test_loaders = data_loaders[0], data_loaders[1], data_loaders[2]
     # train_steps_per_epoch = len(tra_loader) + batch_size - 1
 
     model_params = config['model']
     num_epochs = train_params['num_epochs']
     # optimer_fn = torch.optim.SGD
-    scheduler_fn = eval(config['optimizer']['scheduler'])
     train_params['optimer_fn'] = eval(config['optimizer']['name'])
     # This is a scaling law, lr / lr_0 = batch_size / batch_size_0
     train_params['learning_rate'] = float(
         config['optimizer']['lr']) * world_size
+    scheduler_fn = partial(
+        my_OneCycleLR, 
+        max_lr=train_params['learning_rate'],
+        total_steps=(len(tra_loaders[0]) + tra_loaders[0].num_workers) * num_epochs)
+    # scheduler_fn = eval(config['optimizer']['scheduler'])
     train_params['scheduler_fn'] = scheduler_fn
     train_params.update(config['summary'])
     train_base_dir = os.path.join(base_dir, config['summary']['root_dir'])
     pathlib.Path(train_base_dir).mkdir(exist_ok=True)
-    if not train_params['restore']:
-        clean_dir(train_base_dir)
-    else:
+    if train_params['is_restore']:
         train_params['checkpoint_path'] = os.path.join(
             base_dir,
             train_params['checkpoint_path'],
         )
+    elif train_params['is_train']:
+        clean_dir(train_base_dir)
     model_pair_dict = {
         # "RNN": {"train": mlmodels.RNN_TransSS,
         #         'build_model': build_model_RNN,
@@ -123,7 +128,8 @@ def main_run(config, num_samples):
         "MLP": {"train": qkmodels.MLP,
                 'build_model': build_model_MLP,
                 # "loss_fn": utils.calc_loss_MLP,
-                "loss_fn": data_utils.calc_loss_MLP,
+                "loss_fn": utils.calc_loss_MLP,
+                "infer_fn": utils.inference_fn_MLP,
                 "search_space": {
                     'num_layers': tune.randint(1, 5),
                     # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
@@ -131,7 +137,7 @@ def main_run(config, num_samples):
                 }},
         "FastLSTM": {"train": mlmodels.FastLSTM,
                      'build_model': build_model_RNN,
-                     "loss_fn": data_utils.calc_loss_MLP,
+                     "loss_fn": utils.calc_loss_MLP,
                      #   "loss_fn": utils.test_output,
                      "search_space": {
                          'num_layers': tune.randint(1, 5),
@@ -140,7 +146,8 @@ def main_run(config, num_samples):
                      }},
         "Former": {"train": mlmodels.WestFormer,
                    "build_model": build_model_Former,
-                   "loss_fn": partial(data_utils.calc_loss_Former, **train_params,),
+                #    "loss_fn": partial(utils.calc_loss_Former, **train_params,),
+                    "loss_fn": utils.calc_loss_MLP,
                    "search_space": {
                        'num_layers': tune.qrandint(1, 8, 2),
                        # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
@@ -161,29 +168,157 @@ def main_run(config, num_samples):
     model_name = model_params['name']
     model_pairs = model_pair_dict[model_name]
     loss_fn = model_pairs['loss_fn']
-    my_model_tune = model_tune.ModelTuneRNN(tra_loaders,
-                                            val_loaders,
-                                            num_epochs,
-                                            world_size,
-                                            loss_fn,
-                                            train_base_dir,
-                                            train_params,)
+    # my_model_tune = model_tune.ModelTuneRNN(my_data_gen,
+    #                                         num_epochs,
+    #                                         world_size,
+    #                                         loss_fn,
+    #                                         train_base_dir,
+    #                                         train_params,)
+    my_model_train = model_dist.ModelTrainRNN(
+        my_data_gen, 
+        num_epochs,
+        world_size,
+        loss_fn,
+        train_base_dir, 
+        train_params,
+    )
     start = time.time()
-    if not train_params['is_train']:
-        search_space = model_pairs['search_space']
-        build_model = model_pairs['build_model']
-        my_model_tune.run_tune(num_samples=num_samples,
-                               tune_config=None,
-                               build_model=build_model,
-                               search_space=search_space,
-                               )
+    model_fn = model_pairs['train']
+    model = model_fn(**model_params,)
+    if train_params['is_train']:            
+        my_model_train.run_train(model)
     else:
-        my_model = model_pairs['train']
-        model = my_model(**model_params,)
-        my_model_tune.run_train(
-            model, 
-            restore=train_params['restore'],
-        )
+        model_path = args.model_path.strip()
+        model.load_state_dict(torch.load(model_path, weights_only=True, map_location='cpu'))
 
+        hat_data_dir = os.path.join(
+            base_dir, f'Database/Model_Infer_data/{model_name}')
+        hat_data_dir = pathlib.Path(hat_data_dir)
+        hat_data_dir.mkdir(exist_ok=True)      
+        clean_dir(hat_data_dir)
+        mean = MS_df.loc['mean', output_nodes].to_numpy()
+        stDev = MS_df.loc['stDev', output_nodes].to_numpy()
+        infer_loaders = my_data_gen.sp_wz()
+        my_model_infer = model_dist.ModelInferRNN(
+            infer_loaders=infer_loaders,
+            infer_fn=model_pairs['infer_fn'],
+            world_size=world_size,
+            hat_data_dir=hat_data_dir,
+            mean = mean,
+            stDev = stDev,
+        ) 
+        my_model_infer.run_infer(model)
     end = time.time()
     screen_print(f"Running time {end - start} senconds")
+
+
+def build_model_MLP(search_space):
+    model_params = config['model']
+    input_dim = model_params['input_dim']
+    output_dim = model_params['output_dim']
+    dropout_rate = model_params['dropout_rate']
+    num_layers = search_space['num_layers']
+    base_dim = 128
+    tmp_size = []
+    for i in range(num_layers):
+        tmp_size.append(2 ** i * base_dim)
+    hidden_sizes = []
+    hidden_sizes.extend(tmp_size)
+    hidden_sizes.extend(reversed(tmp_size))
+    model = qkmodels.MLP(input_dim=input_dim,
+                        hidden_sizes=hidden_sizes,
+                        dropout_rate=dropout_rate,
+                        output_dim=output_dim)
+    return model
+
+
+def build_model_RNN(search_space):
+    model_params = config['model']
+    input_dim = model_params['input_dim']
+    output_dim = model_params['output_dim']
+    dropout_rate = model_params['dropout_rate']
+
+    num_layers = search_space['num_layers']
+
+    hidden_size_base = search_space['hidden_size_base']
+    base_dim = 5
+    hidden_size = 2 ** (hidden_size_base + base_dim)
+
+    model = mlmodels.RNN_TransSS(
+        input_dim=input_dim,
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        dropout_rate=dropout_rate,
+        output_dim=output_dim)
+    return model
+
+
+def build_model_Former(search_space):
+    model_params = config['model']
+    input_dim = model_params['input_dim']
+    embed_dim = model_params['embed_dim']
+    output_dim = model_params['output_dim']
+    dropout_rate = model_params['dropout_rate']
+    noise_ratio = model_params['noise_ratio']
+    window_size = model_params['window_size']
+
+    num_layers = search_space['num_layers']
+
+    model = mlmodels.WestFormer(
+        input_dim=input_dim,
+        embed_dim=embed_dim,
+        output_dim=output_dim,
+        window_size=window_size,
+        num_layers=num_layers,
+        dropout_rate=dropout_rate,
+        noise_ratio=noise_ratio,)
+    return model
+
+
+def build_model_ERT(search_space):
+    model_params = config['model']
+    input_dim = model_params['input_dim']
+    embed_dim = model_params['embed_dim']
+    output_dim = model_params['output_dim']
+    dropout_rate = model_params['dropout_rate']
+    noise_ratio = model_params['noise_ratio']
+    window_size = model_params['window_size']
+
+    num_layers = search_space['num_layers']
+
+    model = mlmodels.WestERT(
+        input_dim=input_dim,
+        embed_dim=embed_dim,
+        output_dim=output_dim,
+        window_size=window_size,
+        num_layers=num_layers,
+        dropout_rate=dropout_rate,
+        noise_ratio=noise_ratio,)
+    return model
+
+
+def parse_args():
+    """Parse input args"""
+    parser = argparse.ArgumentParser(description="run gx and gkw")
+    parser.add_argument(
+        "--config",
+        type=str,
+        help="The function you want to run",
+        required=True,
+    )
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        help="The function you want to run",
+        required=False,
+    )
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    config = load_yaml_config(args.config)
+    if os.getenv('SLURM_JOB_ID') is None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
+    main_run(config, num_samples=50)
