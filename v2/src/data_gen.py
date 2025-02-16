@@ -29,7 +29,7 @@ def read_h5_tokamak(
             # col = db[node]
             # nodeDict = col.find_one({"shot":shot})
             # `Node` means inexistence.
-            if hf[node].shape is None or len(np.unique(hf[node][()])):
+            if hf[node].shape is None or len(np.unique(hf[node][()])) == 1:
                 nodeData = np.zeros_like(timeAxis, dtype=dtype)
                 node_flags.append(0)
             else:
