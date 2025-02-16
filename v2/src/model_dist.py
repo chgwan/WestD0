@@ -86,3 +86,30 @@ class ModelTrainRNN(model_tra_dist.ModelTrain):
         val_loss = ddp_loss[0] / ddp_loss[1]
         val_loss = val_loss.item()
         return val_loss
+    
+class ModelInferRNN(model_tra_dist.ModelInfer):
+    @torch.no_grad()
+    def model_infer(self, model, infer_loader, infer_fn, **kwargs):
+        # return super().model_infer(model, infer_loader, infer_fn, **kwargs)
+        model.eval()
+        ddp_loss = torch.zeros(2).cuda()
+        infer_steps = len(infer_loader) + (infer_loader.num_workers - 1)
+        world_rank = dist.get_rank()
+        infer_bar = tqdm(
+            total=infer_steps,
+                desc=f'Rank {world_rank} model inferring')
+        for data in infer_loader:
+            X, Y = data[0], data[1]
+            batch_len, batch_node_flags = data[2], data[3]
+            X, Y = X.float().cuda(), Y.float().cuda()
+            batch_len, batch_node_flags = batch_len.int().cuda(), batch_node_flags.int().cuda()
+            infos = data[-1]
+            infer_loss = infer_fn(model, X, Y, batch_len, batch_node_flags, infos, **kwargs)
+            ddp_loss[0] += infer_loss.detach().item()
+            ddp_loss[1] += 1
+            infer_bar.update()
+        infer_bar.close()
+        dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
+        infer_loss = ddp_loss[0] / ddp_loss[1]
+        infer_loss = infer_loss.item()
+        return infer_loss
