@@ -58,6 +58,7 @@ def inference_fn_MLP(
 
     Y_hat = Y_hat.cpu().numpy()
     Y_tgt = Y_tgt.cpu().numpy()
+    Y_len = Y_len.cpu().numpy()
 
     # shot_dict = {
     #     'Y_hat': Y_hat, 
@@ -76,10 +77,11 @@ def inference_fn_MLP(
         tail_name = os.path.basename(file_name)
         with open(res_path, 'a') as f:
             f.write(f"{loss:.5f}, {tail_name} \n")
-
+        
+        h5_len = Y_len[idx]
         h5_file = os.path.join(hat_data_dir, tail_name)
         h5_dict = dict({})
-        h5_dict['Y_hat'] = Y_hat[idx, ...]
-        h5_dict['Y_tgt'] = Y_tgt[idx, ...]
+        h5_dict['Y_hat'] = Y_hat[idx, :h5_len, ...]
+        h5_dict['Y_tgt'] = Y_tgt[idx, :h5_len, ...]
         save_to_file(h5_file, h5_dict)
     return batch_loss_mean
