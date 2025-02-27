@@ -42,7 +42,7 @@ def main_run(config, num_samples):
     stat_f = pathlib.Path("./Database/Stat/h5_stat.csv")
     stat_df = pd.read_csv(stat_f, index_col=0)
 
-    h5s = list(data_dir.iterdir())
+    h5s = list(data_dir.glob('*.h5'))
     world_size = torch.cuda.device_count()
 
     # MS_file = data_dir.joinpath('h5_global_MS.csv')
@@ -73,6 +73,8 @@ def main_run(config, num_samples):
     shuffle = data_params['shuffle']
     if shuffle:
         random.shuffle(h5s)
+    filter_wz = 99
+    filter_func = data_gen.SMA
     my_data_gen = data_gen.H5GenDataLoader(
         h5s=h5s,
         input_nodes=input_nodes,
@@ -84,6 +86,8 @@ def main_run(config, num_samples):
         stat_df=stat_df,
         pin_memory=True,
         world_size=world_size,
+        filter_func = filter_func, 
+        filter_wz = filter_wz,
     )
     my_data_gen.set_split_ratio([0.6, 0.2, 0.2])
     data_loaders = my_data_gen.sp_ratio_wz()
@@ -137,8 +141,8 @@ def main_run(config, num_samples):
                 }},
         "FastLSTM": {"train": mlmodels.FastLSTM,
                      'build_model': build_model_RNN,
-                     "loss_fn": utils.calc_loss_MLP,
-                     #   "loss_fn": utils.test_output,
+                    #  "loss_fn": utils.calc_loss_MLP,
+                       "loss_fn": utils.calc_loss_RNN,
                      "search_space": {
                          'num_layers': tune.randint(1, 5),
                          # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
@@ -174,7 +178,8 @@ def main_run(config, num_samples):
     #                                         loss_fn,
     #                                         train_base_dir,
     #                                         train_params,)
-    my_model_train = model_dist.ModelTrainRNN(
+    # my_model_train = model_dist.ModelTrainRNN(
+    my_model_train = model_dist.ModelTrainTruncatedRNN(
         my_data_gen, 
         num_epochs,
         world_size,
