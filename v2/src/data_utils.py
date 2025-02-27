@@ -51,6 +51,12 @@ def read_all_scope(mat_file: os.PathLike):
 
 
 def merge_mat_h5(h5, mat_file):
+    r"""
+
+    Args: 
+        h5: the filepath of IMAS h5 file.
+        mat_file: the filepath of DCS matfile.
+    """
     mat_dict, start_time = read_all_scope(mat_file)
     # all discharge start exactly from 32
     dt = 32 - start_time
@@ -58,10 +64,11 @@ def merge_mat_h5(h5, mat_file):
     mat_dict['time'] = mat_dict['time'] + dt
 
     sample_rate = 1e-3
+    h5_dict = convert_hdf5_2dict(h5)
+
     end_time = mat_dict['time'][-1]
     time_axis = np.arange(32, end_time, sample_rate)
     time_axis_before = np.arange(mat_dict['time'][0], 32, sample_rate)
-    h5_dict = convert_hdf5_2dict(h5)
 
     h5_nodes = list(h5_dict.keys())
     h5_nodes.remove('time')
@@ -76,6 +83,8 @@ def merge_mat_h5(h5, mat_file):
         data_dict[node] = np.interp(time_axis, h5_dict['time'], h5_dict[node])
     data_dict['time'] = time_axis
     data_dict['time_before'] = time_axis_before
+    data_dict['PCS_time'] = mat_dict['time']
+    data_dict['IMAS_time'] = h5_dict['time']
     return data_dict
 
 
