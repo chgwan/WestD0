@@ -26,10 +26,11 @@ class FastLSTM(nn.Module):
             num_layers=num_layers,
             proj_size=output_dim,
             dropout=dropout_rate,
+            batch_first=True,
             )
     def forward(self, X, state=None):
         Y, state = self.model(X, state)
-        return Y
+        return Y, state
 
 class EmbedPostion(nn.Sequential):
     def __init__(

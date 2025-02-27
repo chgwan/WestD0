@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 from private_modules.utilities import convert_hdf5_2dict
+import h5py
 # # align data with the actual discharge start based on Ip_ref. 
 # def read_mat_file(mat_file: os.PathLike, nodes):
 #     data = loadmat(mat_file)
@@ -51,9 +52,8 @@ def read_all_scope(mat_file: os.PathLike):
 
 
 def merge_mat_h5(h5, mat_file):
-    r"""
-
-    Args: 
+    r""" merge
+    Args:
         h5: the filepath of IMAS h5 file.
         mat_file: the filepath of DCS matfile.
     """
@@ -87,10 +87,27 @@ def merge_mat_h5(h5, mat_file):
     data_dict['IMAS_time'] = h5_dict['time']
     return data_dict
 
+def findTFEnd(Ip_ref, time):
+    # Ip_ref in 6 digits.
+    IpMax = max(Ip_ref)
+    third_Ip = IpMax // 3
+    ids = Ip_ref > third_Ip
+    d_Ip_ids = np.abs(np.gradient(Ip_ref, time)) < 500
+    TFEnd = time[d_Ip_ids & ids][-1]
+    return TFEnd
 
-def filter(h5s):
-    for h5 in h5s:
-        pass
+def filter(h5):
+    with h5py.File(h5, 'r') as hf:
+        Ip_ref = hf['Ip_scope_0'][()]
+        time = hf['time'][()]
+        TFEnd = findTFEnd(Ip_ref, time)
+        
+        IMAS_time = hf['IMAS_time'][()]
+        IMAS_start, IMAS_end = IMAS_time[0], IMAS_time[-1]
+        if IMAS_end - TFEnd < 0:
+            return False
+        else:
+            return True     
 
 
 if __name__ == "__main__":
