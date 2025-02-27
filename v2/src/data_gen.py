@@ -17,11 +17,22 @@ from typing import LiteralString, List
 def read_h5_tokamak(
         h5_file:os.PathLike, 
         nodes:List[LiteralString],
-        dtype=np.float32):
+        dtype=np.float32,
+        **kwargs):
+    filter_func = kwargs['filter_func']
+    filter_wz = kwargs['filter_wz'] # filter window size
+    half_filter_wz = filter_wz // 2
     with h5py.File(h5_file, mode="r") as hf:
-        times = hf["time"][()]
         timeAxis = hf["time"][()]
-        timeLen = len(timeAxis)
+        # only select the IMAS time scope.
+        IMAS_time = hf['IMAS_time'][()]
+        ids0 = timeAxis >= IMAS_time[0]
+        ids1 = timeAxis <= IMAS_time[-1]
+        ids = ids0 & ids1
+
+        timeAxis = timeAxis[ids]
+        timeAxis = timeAxis[half_filter_wz: - half_filter_wz]
+        # timeLen = len(timeAxis)
         # data:np.ndarray = np.empty((timeLen, 0), dtype=dtype)
         data = []
         node_flags = []
@@ -34,14 +45,15 @@ def read_h5_tokamak(
                 node_flags.append(0)
             else:
                 node_flags.append(1)
-                nodeData = hf[node][()]
+                nodeData = hf[node][()][ids]
                 inf_value = 3.2e32
                 nodeData = np.nan_to_num(
                     nodeData,
                     posinf=inf_value,
                     neginf=-inf_value,)
-                # if the times lengeh is unsame with nodeData length
-                assert len(times) == len(nodeData), \
+                nodeData = filter_func(nodeData, filter_wz)
+                # if the times length is unsame with nodeData length
+                assert len(timeAxis) == len(nodeData), \
                     "file: %s, Node:%s" % (h5_file, node)
                 # nodeData = np.interp(timeAxis, times, nodeData)
             if len(nodeData.shape) == 1:
@@ -52,6 +64,11 @@ def read_h5_tokamak(
         # data = np.stack(data, dtype=dtype, axis=1)
         data = np.concatenate(data, dtype=dtype, axis=1)
     return data, node_flags, timeAxis
+
+def SMA(data, window_size):
+    if window_size <= 0:
+        raise ValueError("Window size of SMA must be greater than zero.")    
+    return np.convolve(data, np.ones(window_size) / window_size, mode='valid')
 
 class StdWESTShotDS(MCFDS.MCFShotDataSet):
     def __init__(self, 
