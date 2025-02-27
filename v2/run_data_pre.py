@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pathlib
 import os
-from v2.src.data_utils import merge_mat_h5
+from src.data_utils import merge_mat_h5
 from private_modules.utilities import save_to_file, parse_args, MpRun
 from private_modules.FedData import stat_node
 from tqdm import tqdm
@@ -9,18 +9,18 @@ import h5py
 
 def save_merge():
     def warp_merge(shot):
-        h5_file = D0_signal_dir.joinpath(f'{shot}.h5')
+        h5_file = IMASH5_dir.joinpath(f'{shot}.h5')
         mat_file = Mat_dir.joinpath(f'DCS_archive_{shot}.mat')
         data_dict = merge_mat_h5(h5_file, mat_file)
         west_f = WestData_dir.joinpath(f'{shot}.h5')
         save_to_file(west_f, data_dict, True)
 
-    D0_signal_dir = os.path.expandvars("$DATABASE_PATH/DataBase/WEST/D0_signals")
-    D0_signal_dir = pathlib.Path(D0_signal_dir)
-    Mat_dir = D0_signal_dir.parent.joinpath("PCS")
-    WestData_dir = D0_signal_dir.parent.joinpath("WestData")
+    IMASH5_dir = os.path.expandvars("$DATABASE_PATH/DataBase/WEST/IMASH5")
+    IMASH5_dir = pathlib.Path(IMASH5_dir)
+    Mat_dir = IMASH5_dir.parent.joinpath("PCS")
+    WestData_dir = IMASH5_dir.parent.joinpath("WestData")
 
-    shots = [int(shot.parts[-1][:-3]) for shot in D0_signal_dir.iterdir()]
+    shots = [int(shot.parts[-1][:-3]) for shot in IMASH5_dir.iterdir()]
     mp_run = MpRun(num_workers=10)
     mp_run.mp_no_return_run_func(warp_merge, shots)
 
