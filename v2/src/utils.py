@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 from private_modules.Torch import tools
-from private_modules.utilities import save_to_file
+from private_modules.utilities import save_to_file, screen_print
 import h5py
 import pickle
 
@@ -20,7 +20,7 @@ def calc_loss_MLP(
 ):
     loss_fn = tools.MaskedMSELoss(reduction='mean')
     Y_hat = model(X)
-    loss = loss_fn(Y_hat, Y, None, None)
+    loss = loss_fn(Y_hat, Y, Y_len, batch_output_flags)
     # print(loss)
     # print(X.shape)
     # print(Y)
@@ -85,3 +85,53 @@ def inference_fn_MLP(
         h5_dict['Y_tgt'] = Y_tgt[idx, :h5_len, ...]
         save_to_file(h5_file, h5_dict)
     return batch_loss_mean
+
+def calc_loss_RNN(
+    model,
+    X: torch.tensor,
+    Y: torch.tensor,
+    Y_len,
+    batch_output_flags,
+    current_steps = None,
+    **kwargs,
+):
+    truncated_length = 100
+    seq_len = torch.max(Y_len).item()
+    # screen_print(f"sequence length: {seq_len.item()}")
+    slice_windows = seq_len // truncated_length
+    loss_fn = tools.MaskedMSELoss(reduction='mean')
+    hidden = None
+    if model.training:
+        for i in range(slice_windows):
+            # every window length should be the same!! 
+            start_idx = i * truncated_length
+            end_length = start_idx + truncated_length
+            X_cut = X[:, start_idx:end_length, :]
+            Y_cut = Y[:, start_idx:end_length, :]
+            output, hidden = model(X_cut, hidden)
+            hidden = (hidden[0].detach(), hidden[1].detach())
+            dummy_len = Y_len - end_length
+            dummy_len = torch.where(dummy_len < 0, 0, dummy_len)
+            loss = loss_fn(Y_cut, output, dummy_len, batch_output_flags)
+            # print(f"{start_idx} : {loss:.5f}")
+            if torch.isnan(loss).any().item():
+                raise ValueError(f"Nan in loss in {kwargs['infos']}, " 
+                                 f"start_idx: {start_idx} "
+                                 f"sequence length: {seq_len} ")
+            yield loss
+    else:
+        output, hidden = model(X, hidden)
+        loss = loss_fn(Y, output, Y_len, batch_output_flags)
+        yield loss
+
+
+
+
+    # Y_hat = model(X)
+    # loss = loss_fn(Y_hat, Y, None, None)
+    # # print(loss)
+    # # print(X.shape)
+    # # print(Y)
+    # if torch.isnan(loss).any().item():
+    #     raise ValueError(f"Nan in loss")
+    # return loss
