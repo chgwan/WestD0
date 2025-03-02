@@ -14,15 +14,15 @@ import h5py
 import os
 from typing import LiteralString, List
 
-def findTFEnd(Ip_ref, time):
-    # Ip_ref in 6 digits.
+def findTFEnd(Ip_ref, time, gradient_limit=500):
+    # Ip_ref TopFlat in 6 digits.
     IpMax = max(Ip_ref)
     third_Ip = IpMax // 3
     ids = Ip_ref > third_Ip
-    d_Ip_ids = np.abs(np.gradient(Ip_ref, time)) < 500
+    d_Ip_ids = np.abs(np.gradient(Ip_ref, time)) < gradient_limit
     TFEnd = time[d_Ip_ids & ids][-1]
     return TFEnd
-
+# Tested the Beta_end + slightly increase, it seems lots of errors
 def read_h5_tokamak(
         h5_file:os.PathLike, 
         nodes:List[LiteralString],
@@ -34,16 +34,22 @@ def read_h5_tokamak(
     with h5py.File(h5_file, mode="r") as hf:
         timeAxis = hf["time"][()]
         Ip_ref = hf['Ip_scope_0'][()]
-        TFEnd = findTFEnd(Ip_ref, timeAxis)
-    
+        Ip_TFEnd = findTFEnd(Ip_ref, timeAxis, 500)
+        # Beta_normal = hf['beta_normal'][()]
+        # Beta_n_TFEnd = findTFEnd(Beta_normal, timeAxis, 0.03)
+        # TFEnd = min(Ip_TFEnd, Beta_n_TFEnd)
         # only select the IMAS time scope.
         IMAS_time = hf['IMAS_time'][()]
         IMAS_start, IMAS_end = IMAS_time[0], IMAS_time[-1]
-        ids0 = timeAxis >= IMAS_start
+
+        time_start = IMAS_start
         # reduce the training using in ramp-down phase. 
-        ids1 = timeAxis <= min((IMAS_end - TFEnd) * 0.8 + TFEnd, IMAS_end)
-        # ids1 = timeAxis <= IMAS_end
-        ids = ids0 & ids1
+        # time_end =  ((IMAS_end - Ip_TFEnd) * 0.4 + Ip_TFEnd \
+        #               if IMAS_end > Ip_TFEnd else IMAS_end - 0.2)
+        time_end = IMAS_end
+        ids0 = timeAxis >= time_start
+        ids1 = timeAxis < time_end
+        ids = ids0 & ids1   
 
         timeAxis = timeAxis[ids]
         timeAxis = timeAxis[half_filter_wz: - half_filter_wz]
