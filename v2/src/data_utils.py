@@ -96,7 +96,7 @@ def findTFEnd(Ip_ref, time):
     TFEnd = time[d_Ip_ids & ids][-1]
     return TFEnd
 
-def filter(h5):
+def filter_h5(h5):
     with h5py.File(h5, 'r') as hf:
         Ip_ref = hf['Ip_scope_0'][()]
         time = hf['time'][()]
@@ -105,9 +105,9 @@ def filter(h5):
         IMAS_time = hf['IMAS_time'][()]
         IMAS_start, IMAS_end = IMAS_time[0], IMAS_time[-1]
         if IMAS_end - TFEnd < 0:
-            return False
+            return True
         else:
-            return True     
+            False   
 
 
 if __name__ == "__main__":
