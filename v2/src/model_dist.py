@@ -149,10 +149,11 @@ class ModelTrainTruncatedRNN(model_tra_dist.ModelTrain):
             for data in val_data_loader:
                 X, Y = data[0], data[1]
                 Y_len, Y_flags = data[2], data[3]
+                infos = data[4]
                 X, Y = X.float().cuda(), Y.float().cuda(),
                 Y_len, Y_flags = Y_len.int().cuda(), Y_flags.int().cuda()
                 loss = next(loss_fn(model, X, Y, Y_len, Y_flags,
-                            None,
+                            infos=infos,
                             **self.kwargs))
                 # here is the point, join should combine with backward()
                 # loss.backward()
