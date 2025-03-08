@@ -103,14 +103,16 @@ def calc_loss_RNN(
 ):
     step_size = kwargs['step_size']
     window_size = kwargs['window_size']
+    accu_steps = kwargs['accumulated_steps']
     seq_len = torch.max(Y_len).item()
     # screen_print(f"sequence length: {seq_len.item()}")
-    slice_windows = (seq_len - window_size) // step_size
+    slice_num = (seq_len - window_size) // step_size
     loss_fn = tools.MaskedMSELoss(reduction='mean')
     # loss_fn = nn.MSELoss(reduction='none')
     hidden = None
+    loss_accum = 0
     # if model.training:
-    for i in range(slice_windows):
+    for i in range(slice_num):
         # every window length should be the same!! 
         start_idx = i * step_size
         end_length = start_idx + window_size
@@ -121,20 +123,16 @@ def calc_loss_RNN(
         dummy_len = Y_len - start_idx
         dummy_len = torch.where(dummy_len < 0, 0, dummy_len)
         loss = loss_fn(Y_cut, output, dummy_len, batch_output_flags)
-        # print(f"{dummy_len.min()}, {dummy_len.max()}")
-        # B, T = Y_cut.shape[0], Y_cut.shape[1]
-        # mask = torch.arange(T).expand(B, T).to(Y_cut.device) < dummy_len.unsqueeze(1) 
-        # loss = loss_fn(Y_cut, output)
-        # loss = loss * batch_output_flags[:, None, :] 
-        # # print(Y_cut.shape, loss.shape, mask.shape)
-        # loss = loss.mean(dim=-1) * mask
-        # loss = loss.mean()
-        # print(f"{start_idx} : {loss:.5f}")
+        loss_accum += loss            
         if torch.isnan(loss).any().item():
             raise ValueError(f"Nan in loss in {kwargs['infos']}, " 
                                 f"start_idx: {start_idx} "
                                 f"sequence length: {seq_len} ")
-        yield loss
+        if (i + 1) % accu_steps or (i + 1) == slice_num:
+            # loss_accum.backward()
+            yield loss_accum / accu_steps
+            loss_accum = 0
+        # yield loss
     # else:
     #     output, hidden = model(X, hidden)
     #     loss = loss_fn(Y, output, Y_len, batch_output_flags)
