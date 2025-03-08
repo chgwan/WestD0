@@ -136,7 +136,7 @@ class ModelTrainTruncatedRNN(model_tra_dist.ModelTrain):
     
     # @torch.no_grad()
     def eval(self, epoch, model: Module, val_data_loader) -> None:
-        model.eval()
+        # model.eval()
         loss_fn = self.loss_fn
         world_rank = dist.get_rank()
         val_steps = len(val_data_loader) + (val_data_loader.num_workers - 1)
@@ -152,13 +152,14 @@ class ModelTrainTruncatedRNN(model_tra_dist.ModelTrain):
                 infos = data[4]
                 X, Y = X.float().cuda(), Y.float().cuda(),
                 Y_len, Y_flags = Y_len.int().cuda(), Y_flags.int().cuda()
-                loss = next(loss_fn(model, X, Y, Y_len, Y_flags,
+                loss_gen = loss_fn(model, X, Y, Y_len, Y_flags,
                             infos=infos,
-                            **self.kwargs))
+                            **self.kwargs)
                 # here is the point, join should combine with backward()
-                # loss.backward()
-                ddp_loss[0] += loss.detach().item()
-                ddp_loss[1] += 1
+                for loss in loss_gen:
+                    loss.backward()
+                    ddp_loss[0] += loss.detach().item()
+                    ddp_loss[1] += 1
                 # if world_rank == 0:
                 val_bar.update()
                 # if world_rank == 0:
