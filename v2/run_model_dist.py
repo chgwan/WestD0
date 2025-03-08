@@ -43,6 +43,10 @@ def main_run(config, num_samples):
     stat_df = pd.read_csv(stat_f, index_col=0)
 
     h5s = list(data_dir.glob('*.h5'))
+    h5s = h5s[:]
+    # shots = [58174, 57384, 57604, 58111, 58127, 58192, 58209]
+    # h5s = [data_dir.joinpath(f"{shot}.h5") for shot in shots]
+
     world_size = torch.cuda.device_count()
 
     # MS_file = data_dir.joinpath('h5_global_MS.csv')
@@ -89,7 +93,8 @@ def main_run(config, num_samples):
         filter_func = filter_func, 
         filter_wz = filter_wz,
     )
-    my_data_gen.set_split_ratio([0.6, 0.2, 0.2])
+    my_data_gen.set_split_ratio([0.8, 0.1, 0.1])
+    # my_data_gen.set_split_ratio([0.01, 0.9, 0.03])
     data_loaders = my_data_gen.sp_ratio_wz()
     tra_loaders, val_loaders, test_loaders = data_loaders[0], data_loaders[1], data_loaders[2]
     # train_steps_per_epoch = len(tra_loader) + batch_size - 1
@@ -103,8 +108,9 @@ def main_run(config, num_samples):
         config['optimizer']['lr']) * world_size
     scheduler_fn = partial(
         my_OneCycleLR, 
-        max_lr=train_params['learning_rate'],
+        max_lr=min(train_params['learning_rate']*1e3, 1e-1), # 2 order of magnitude or 1e-2
         total_steps=(len(tra_loaders[0]) + tra_loaders[0].num_workers) * num_epochs)
+    # scheduler_fn = None
     # scheduler_fn = eval(config['optimizer']['scheduler'])
     train_params['scheduler_fn'] = scheduler_fn
     train_params.update(config['summary'])
@@ -133,7 +139,7 @@ def main_run(config, num_samples):
                 'build_model': build_model_MLP,
                 # "loss_fn": utils.calc_loss_MLP,
                 "loss_fn": utils.calc_loss_MLP,
-                "infer_fn": utils.inference_fn_MLP,
+                "infer_fn": utils.inference_fn,
                 "search_space": {
                     'num_layers': tune.randint(1, 5),
                     # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
@@ -143,6 +149,7 @@ def main_run(config, num_samples):
                      'build_model': build_model_RNN,
                     #  "loss_fn": utils.calc_loss_MLP,
                        "loss_fn": utils.calc_loss_RNN,
+                       "infer_fn":utils.inference_fn,
                      "search_space": {
                          'num_layers': tune.randint(1, 5),
                          # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
@@ -186,6 +193,9 @@ def main_run(config, num_samples):
         loss_fn,
         train_base_dir, 
         train_params,
+        # window_size = model_params['window_size'],
+        # step_size = model_params['step_size'],
+        **model_params,
     )
     start = time.time()
     model_fn = model_pairs['train']
@@ -211,6 +221,7 @@ def main_run(config, num_samples):
             hat_data_dir=hat_data_dir,
             mean = mean,
             stDev = stDev,
+            is_RNN = train_params['is_RNN'],
         ) 
         my_model_infer.run_infer(model)
     end = time.time()
@@ -324,6 +335,6 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     config = load_yaml_config(args.config)
-    if os.getenv('SLURM_JOB_ID') is None:
+    if os.getenv('SLURM_JOB_ID') is None and os.getenv('PBS_JOBID') is None:
         os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
     main_run(config, num_samples=50)
