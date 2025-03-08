@@ -40,6 +40,8 @@ def inference_fn(
 ):
     hat_data_dir = kwargs['hat_data_dir']
     res_path = os.path.join(hat_data_dir, 'result.csv')
+    with open(res_path, 'a') as f:
+        f.write(f"loss, file_name \n")
     loss_fn =  tools.MaskedMSELoss(reduction='none')
     mean = kwargs['mean']
     stDev = kwargs['stDev']
@@ -99,8 +101,8 @@ def calc_loss_RNN(
     current_steps = None,
     **kwargs,
 ):
-    step_size = kwargs[]
-    window_size = 1024
+    step_size = kwargs['step_size']
+    window_size = kwargs['window_size']
     seq_len = torch.max(Y_len).item()
     # screen_print(f"sequence length: {seq_len.item()}")
     slice_windows = (seq_len - window_size) // step_size
