@@ -41,6 +41,9 @@ def main_run(config, num_samples):
     # stat_f = data_dir.joinpath('h5_stat.csv')
     stat_f = pathlib.Path("./Database/Stat/h5_stat.csv")
     stat_df = pd.read_csv(stat_f, index_col=0)
+    # ids = stat_df.loc[:, 'length'] < int(20e3)
+    # shots = stat_df.index.to_numpy()
+    # shots = shots[ids]
 
     h5s = list(data_dir.glob('*.h5'))
     h5s = h5s[:]
@@ -93,7 +96,9 @@ def main_run(config, num_samples):
         filter_func = filter_func, 
         filter_wz = filter_wz,
     )
-    my_data_gen.set_split_ratio([0.8, 0.1, 0.1])
+    ratio_list = data_params.get('ratios', [0.8, 0.1, 0.1])
+    my_data_gen.set_split_ratio(ratio_list)
+    # my_data_gen.set_split_ratio([0.8, 0.1, 0.1])
     # my_data_gen.set_split_ratio([0.01, 0.9, 0.03])
     data_loaders = my_data_gen.sp_ratio_wz()
     tra_loaders, val_loaders, test_loaders = data_loaders[0], data_loaders[1], data_loaders[2]
@@ -197,9 +202,12 @@ def main_run(config, num_samples):
         # step_size = model_params['step_size'],
         **model_params,
     )
-    start = time.time()
     model_fn = model_pairs['train']
     model = model_fn(**model_params,)
+    total_params = sum(p.numel() for p in model.parameters())
+    screen_print(f"Total parameters: {total_params / 1e3:.0f} K")
+    # torch.cuda.reset_peak_memory_stats()
+    start = time.time()
     if train_params['is_train']:            
         my_model_train.run_train(model)
     else:
@@ -225,6 +233,7 @@ def main_run(config, num_samples):
         ) 
         my_model_infer.run_infer(model)
     end = time.time()
+    # screen_print(f"Peak memory usage: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
     screen_print(f"Running time {end - start} senconds")
 
 
