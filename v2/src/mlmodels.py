@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+    # -*- coding: utf-8 -*- 
 import torch
 from torch import nn
 from torch import Tensor
@@ -17,19 +17,25 @@ class FastLSTM(nn.Module):
         dropout_rate: float = 0.0,
         output_dim: int = 1,
         noise_ratio: float = 0.1,
+        bidirectional: bool = False,
         **kwargs,
     ) -> None:
         super().__init__()
-        self.model = nn.LSTM(
+        self.lstm = nn.LSTM(
             input_size=input_dim,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            proj_size=output_dim,
+            # proj_size=output_dim,
             dropout=dropout_rate,
+            bidirectional = bidirectional,
             batch_first=True,
-            )
+        )
+        self.mlp = nn.Linear(
+            hidden_size * (bidirectional + 1), 
+            output_dim)
     def forward(self, X, state=None):
-        Y, state = self.model(X, state)
+        Y, state = self.lstm(X, state)
+        Y = self.mlp(Y)
         return Y, state
 
 class EmbedPostion(nn.Sequential):
