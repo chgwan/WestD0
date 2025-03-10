@@ -9,6 +9,7 @@ from private_modules.utilities import save_to_file, screen_print
 import h5py
 import pickle
 from torch import nn
+from tqdm import tqdm
 
 def calc_loss_MLP(
     model,
@@ -103,17 +104,17 @@ def calc_loss_RNN(
 ):
     step_size = kwargs['step_size']
     window_size = kwargs['window_size']
-    accu_steps = kwargs['accumulated_steps']
+    # accu_steps = kwargs['accumulated_steps']
     seq_len = torch.max(Y_len).item()
     # screen_print(f"sequence length: {seq_len.item()}")
-    slice_num = (seq_len - window_size) // step_size
+    # slice_num = (seq_len - window_size) // step_size
+    slice_num = (seq_len) // step_size
     loss_fn = tools.MaskedMSELoss(reduction='mean')
     # loss_fn = nn.MSELoss(reduction='none')
     hidden = None
     loss_accum = 0
     # if model.training:
-    for i in range(slice_num):
-        # every window length should be the same!! 
+    for i in tqdm(range(slice_num)):
         start_idx = i * step_size
         end_length = start_idx + window_size
         X_cut = X[:, start_idx:end_length, :]
@@ -128,10 +129,11 @@ def calc_loss_RNN(
             raise ValueError(f"Nan in loss in {kwargs['infos']}, " 
                                 f"start_idx: {start_idx} "
                                 f"sequence length: {seq_len} ")
-        if (i + 1) % accu_steps or (i + 1) == slice_num:
-            # loss_accum.backward()
-            yield loss_accum / accu_steps
-            loss_accum = 0
+        yield loss
+        # if ((i + 1) % accu_steps == 0) or (i + 1) == slice_num:
+        #     # loss_accum.backward()
+        #     yield loss_accum / accu_steps
+        #     loss_accum = 0
         # yield loss
     # else:
     #     output, hidden = model(X, hidden)
