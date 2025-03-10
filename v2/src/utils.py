@@ -114,7 +114,7 @@ def calc_loss_RNN(
     hidden = None
     loss_accum = 0
     # if model.training:
-    for i in tqdm(range(slice_num)):
+    for i in range(slice_num):
         start_idx = i * step_size
         end_length = start_idx + window_size
         X_cut = X[:, start_idx:end_length, :]
