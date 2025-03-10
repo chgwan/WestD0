@@ -44,11 +44,11 @@ def main_run(config, num_samples):
     # ids = stat_df.loc[:, 'length'] < int(20e3)
     # shots = stat_df.index.to_numpy()
     # shots = shots[ids]
+    # h5s = [data_dir.joinpath(f"{shot}.h5") for shot in shots]
 
     h5s = list(data_dir.glob('*.h5'))
     h5s = h5s[:]
     # shots = [58174, 57384, 57604, 58111, 58127, 58192, 58209]
-    # h5s = [data_dir.joinpath(f"{shot}.h5") for shot in shots]
 
     world_size = torch.cuda.device_count()
 
