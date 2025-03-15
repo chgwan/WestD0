@@ -9,7 +9,6 @@ from src import data_gen
 from src import mlmodels, model_dist, utils
 from private_modules import load_yaml_config, clean_dir, screen_print
 from private_modules.Torch import tools, qkmodels
-from ray import tune
 import pandas as pd
 import numpy as np
 import time
@@ -146,28 +145,30 @@ def main_run(config, num_samples):
                 "loss_fn": utils.calc_loss_MLP,
                 "infer_fn": utils.inference_fn,
                 "search_space": {
-                    'num_layers': tune.randint(1, 5),
+                    'num_layers': list(range(1, 5, 2)),
                     # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
-                    "learning_rate": tune.qloguniform(1e-4, 1e-1, 5e-5),
-                }},
+                    "learning_rate": [10 ** -i for i in range(2, 4)],
+                }
+                },
         "FastLSTM": {"train": mlmodels.FastLSTM,
                      'build_model': build_model_RNN,
                     #  "loss_fn": utils.calc_loss_MLP,
                        "loss_fn": utils.calc_loss_RNN,
                        "infer_fn":utils.inference_fn,
-                     "search_space": {
-                         'num_layers': tune.randint(1, 5),
-                         # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
-                         "learning_rate": tune.qloguniform(1e-4, 1e-1, 5e-5),
-                     }},
+                     "search_space": {            
+                        'num_layers': list(range(1, 5)),
+                        "hidden_size": [2 ** i for i in range(6, 12)],
+                        "learning_rate": [10 ** -i for i in range(2, 4)],
+                     },
+                     },
         "Former": {"train": mlmodels.WestFormer,
                    "build_model": build_model_Former,
                 #    "loss_fn": partial(utils.calc_loss_Former, **train_params,),
                     "loss_fn": utils.calc_loss_MLP,
                    "search_space": {
-                       'num_layers': tune.qrandint(1, 8, 2),
+                       'num_layers':list(range(1, 5, 2)),
                        # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
-                       "learning_rate": tune.qloguniform(1e-4, 1e-1, 5e-5),
+                       "learning_rate": [10 ** -i for i in range(2, 4)],
                    },
                    },
         # "ERT": {"train": mlmodels.RZIpERT,
@@ -233,11 +234,8 @@ def main_run(config, num_samples):
         ) 
         my_model_infer.run_infer(model)
     elif train_params['train_type'] == "tune":
-        num_samples = 2
-        search_space = {
-            'num_layers': list(range(1, 5, 2)),
-            "hidden_size_base": list(range(1, 5, 2)),
-            "learning_rate": [10 ** -i for i in range(2, 4)]}
+        num_samples = train_params['num_trials']
+        search_space = model_pairs['search_space']
         my_model_train.run_tune(num_samples, model_pairs['build_model'], search_space)
     end = time.time()
     # screen_print(f"Peak memory usage: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
@@ -273,9 +271,8 @@ def build_model_RNN(search_space):
 
     num_layers = search_space['num_layers']
 
-    hidden_size_base = search_space['hidden_size_base']
-    base_dim = 5
-    hidden_size = 2 ** (hidden_size_base + base_dim)
+    hidden_size = search_space['hidden_size']
+
 
     model = mlmodels.FastLSTM(
         input_dim=input_dim,
