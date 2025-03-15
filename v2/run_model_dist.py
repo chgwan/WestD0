@@ -25,7 +25,7 @@ def my_OneCycleLR(optimizer, max_lr, total_steps):
 
 # add more length mask in the future. 
 # @tools.ray_start
-def main_run(config, num_samples):
+def main_run(config):
     train_params = config["train"]
     model_params = config["model"]
     data_params = config["data"]
@@ -233,7 +233,7 @@ def main_run(config, num_samples):
             is_RNN = train_params['is_RNN'],
         ) 
         my_model_infer.run_infer(model)
-    elif train_params['train_type'] == "tune":
+    elif train_params['train_type'] == "tune" or train_params['train_type'] == "tune-restore":
         num_samples = train_params['num_trials']
         search_space = model_pairs['search_space']
         my_model_train.run_tune(num_samples, model_pairs['build_model'], search_space)
@@ -352,4 +352,4 @@ if __name__ == "__main__":
     config = load_yaml_config(args.config)
     if os.getenv('SLURM_JOB_ID') is None and os.getenv('PBS_JOBID') is None:
         os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
-    main_run(config, num_samples=50)
+    main_run(config)
