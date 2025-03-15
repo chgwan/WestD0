@@ -41,8 +41,6 @@ def inference_fn(
 ):
     hat_data_dir = kwargs['hat_data_dir']
     res_path = os.path.join(hat_data_dir, 'result.csv')
-    with open(res_path, 'a') as f:
-        f.write(f"loss, file_name \n")
     loss_fn =  tools.MaskedMSELoss(reduction='none')
     mean = kwargs['mean']
     stDev = kwargs['stDev']
