@@ -47,7 +47,7 @@ def main_run(config, num_samples):
     # h5s = [data_dir.joinpath(f"{shot}.h5") for shot in shots]
 
     h5s = list(data_dir.glob('*.h5'))
-    h5s = h5s[:]
+    # h5s = h5s[:]
     # shots = [58174, 57384, 57604, 58111, 58127, 58192, 58209]
 
     world_size = torch.cuda.device_count()
@@ -121,12 +121,12 @@ def main_run(config, num_samples):
     train_params.update(config['summary'])
     train_base_dir = os.path.join(base_dir, config['summary']['root_dir'])
     pathlib.Path(train_base_dir).mkdir(exist_ok=True)
-    if train_params['is_restore']:
+    if train_params['train_type'] == "restore":
         train_params['checkpoint_path'] = os.path.join(
             base_dir,
             train_params['checkpoint_path'],
         )
-    elif train_params['is_train']:
+    elif train_params['train_type'] == "train" or train_params['train_type'] == "tune":
         clean_dir(train_base_dir)
     model_pair_dict = {
         # "RNN": {"train": mlmodels.RNN_TransSS,
@@ -190,7 +190,7 @@ def main_run(config, num_samples):
     #                                         loss_fn,
     #                                         train_base_dir,
     #                                         train_params,)
-    # my_model_train = model_dist.ModelTrainRNN(
+    # my_model_train = model_dist_new.ModelTrainRNN(
     my_model_train = model_dist.ModelTrainTruncatedRNN(
         my_data_gen, 
         num_epochs,
@@ -208,9 +208,9 @@ def main_run(config, num_samples):
     screen_print(f"Total parameters: {total_params / 1e3:.0f} K")
     # torch.cuda.reset_peak_memory_stats()
     start = time.time()
-    if train_params['is_train']:            
+    if train_params['train_type'] == "train" or train_params['train_type'] == "restore":            
         my_model_train.run_train(model)
-    else:
+    elif train_params['train_type'] == "inference":
         model_path = args.model_path.strip()
         model.load_state_dict(torch.load(model_path, weights_only=True, map_location='cpu'))
 
@@ -232,6 +232,13 @@ def main_run(config, num_samples):
             is_RNN = train_params['is_RNN'],
         ) 
         my_model_infer.run_infer(model)
+    elif train_params['train_type'] == "tune":
+        num_samples = 2
+        search_space = {
+            'num_layers': list(range(1, 5, 2)),
+            "hidden_size_base": list(range(1, 5, 2)),
+            "learning_rate": [10 ** -i for i in range(2, 4)]}
+        my_model_train.run_tune(num_samples, model_pairs['build_model'], search_space)
     end = time.time()
     # screen_print(f"Peak memory usage: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
     screen_print(f"Running time {end - start} senconds")
@@ -262,6 +269,7 @@ def build_model_RNN(search_space):
     input_dim = model_params['input_dim']
     output_dim = model_params['output_dim']
     dropout_rate = model_params['dropout_rate']
+    bidirectional = model_params['bidirectional']
 
     num_layers = search_space['num_layers']
 
@@ -269,12 +277,13 @@ def build_model_RNN(search_space):
     base_dim = 5
     hidden_size = 2 ** (hidden_size_base + base_dim)
 
-    model = mlmodels.RNN_TransSS(
+    model = mlmodels.FastLSTM(
         input_dim=input_dim,
         hidden_size=hidden_size,
         num_layers=num_layers,
         dropout_rate=dropout_rate,
-        output_dim=output_dim)
+        output_dim=output_dim,
+        bidirectional=bidirectional,)
     return model
 
 
