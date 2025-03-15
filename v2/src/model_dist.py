@@ -7,6 +7,7 @@ from private_modules.Torch import model_tra_dist
 from typing import Any, Callable
 import torch.distributed as dist
 from tqdm import tqdm
+import os
 # from torch.distributed.algorithms.join import Join
 
 class ModelTrainRNN(model_tra_dist.ModelTrain):
@@ -171,6 +172,13 @@ class ModelTrainTruncatedRNN(model_tra_dist.ModelTrain):
         return val_loss
     
 class ModelInferRNN(model_tra_dist.ModelInfer):
+    def __init__(self, infer_loaders, infer_fn = None, world_size = 1, **kwargs):
+        super().__init__(infer_loaders, infer_fn, world_size, **kwargs)
+        hat_data_dir = kwargs['hat_data_dir']
+        res_path = os.path.join(hat_data_dir, 'result.csv')
+        with open(res_path, 'a') as f:
+            f.write(f"loss, file_name\n")        
+
     @torch.no_grad()
     def model_infer(self, model, infer_loader, infer_fn, **kwargs):
         # return super().model_infer(model, infer_loader, infer_fn, **kwargs)
