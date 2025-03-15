@@ -1,4 +1,4 @@
-    # -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*- 
 import torch
 from torch import nn
 from torch import Tensor
@@ -16,7 +16,7 @@ class FastLSTM(nn.Module):
         num_layers: int,
         dropout_rate: float = 0.0,
         output_dim: int = 1,
-        noise_ratio: float = 0.1,
+        # noise_ratio: float = 0.1,
         bidirectional: bool = False,
         **kwargs,
     ) -> None:
