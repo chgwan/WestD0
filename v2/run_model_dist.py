@@ -2,7 +2,6 @@
 import argparse
 import pathlib
 import torch
-import ray
 import os
 
 from src import data_gen
@@ -10,7 +9,6 @@ from src import mlmodels, model_dist, utils
 from private_modules import load_yaml_config, clean_dir, screen_print
 from private_modules.Torch import tools, qkmodels
 import pandas as pd
-import numpy as np
 import time
 import random
 from functools import partial
@@ -157,17 +155,17 @@ def main_run(config):
                        "infer_fn":utils.inference_fn,
                      "search_space": {            
                         'num_layers': list(range(1, 5)),
-                        "hidden_size": [2 ** i for i in range(6, 12)],
+                        "hidden_size": [2 ** i for i in range(0, 9)],
                         "learning_rate": [10 ** -i for i in range(2, 4)],
                      },
                      },
         "Former": {"train": mlmodels.WestFormer,
                    "build_model": build_model_Former,
                 #    "loss_fn": partial(utils.calc_loss_Former, **train_params,),
-                    "loss_fn": utils.calc_loss_MLP,
+                    "loss_fn": utils.calc_loss_Former,
                    "search_space": {
-                       'num_layers':list(range(1, 5, 2)),
-                       # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
+                       'num_layers': list(range(1, 10)),
+                       'embed_dim': [2 ** (i+6) for i in range(4)],
                        "learning_rate": [10 ** -i for i in range(2, 4)],
                    },
                    },
@@ -287,13 +285,14 @@ def build_model_RNN(search_space):
 def build_model_Former(search_space):
     model_params = config['model']
     input_dim = model_params['input_dim']
-    embed_dim = model_params['embed_dim']
+    # embed_dim = model_params['embed_dim']
     output_dim = model_params['output_dim']
     dropout_rate = model_params['dropout_rate']
     noise_ratio = model_params['noise_ratio']
     window_size = model_params['window_size']
 
     num_layers = search_space['num_layers']
+    embed_dim = search_space['embed_dim']
 
     model = mlmodels.WestFormer(
         input_dim=input_dim,
@@ -343,6 +342,21 @@ def parse_args():
         help="The function you want to run",
         required=False,
     )
+    parser.add_argument(
+        "--port",
+        type=str,
+        default='12345',
+        help="The function you want to run",
+        required=False,
+    )
+    parser.add_argument(
+        "--addr",
+        type=str,
+        default='localhost',
+        help="The function you want to run",
+        required=False,
+    )
+    
     args = parser.parse_args()
     return args
 
@@ -352,4 +366,6 @@ if __name__ == "__main__":
     config = load_yaml_config(args.config)
     if os.getenv('SLURM_JOB_ID') is None and os.getenv('PBS_JOBID') is None:
         os.environ["CUDA_VISIBLE_DEVICES"] = config['CUDA_VISIBLE_DEVICES']
+    os.environ['MASTER_ADDR'] = args.addr
+    os.environ['MASTER_PORT'] = args.port
     main_run(config)
