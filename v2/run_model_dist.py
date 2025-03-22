@@ -155,8 +155,8 @@ def main_run(config):
                        "infer_fn":utils.inference_fn,
                      "search_space": {            
                         'num_layers': list(range(1, 5)),
-                        "hidden_size": [2 ** i for i in range(0, 9)],
-                        "learning_rate": [10 ** -i for i in range(2, 4)],
+                        "hidden_size": [2 ** i for i in range(0, 10)],
+                        "learning_rate": [10 ** -i for i in range(1, 4)],
                      },
                      },
         "Former": {"train": mlmodels.WestFormer,
@@ -165,7 +165,7 @@ def main_run(config):
                     "loss_fn": utils.calc_loss_Former,
                    "search_space": {
                        'num_layers': list(range(1, 10)),
-                       'embed_dim': [2 ** (i+6) for i in range(4)],
+                       'embed_dim': [2 ** i for i in range(3, 8)],
                        "learning_rate": [10 ** -i for i in range(2, 4)],
                    },
                    },
@@ -228,7 +228,7 @@ def main_run(config):
             hat_data_dir=hat_data_dir,
             mean = mean,
             stDev = stDev,
-            is_RNN = train_params['is_RNN'],
+            **model_params, # model_type
         ) 
         my_model_infer.run_infer(model)
     elif train_params['train_type'] == "tune" or train_params['train_type'] == "tune-restore":
