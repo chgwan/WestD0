@@ -164,7 +164,7 @@ def main_run(config):
                 #    "loss_fn": partial(utils.calc_loss_Former, **train_params,),
                     "loss_fn": utils.calc_loss_Former,
                    "search_space": {
-                       'num_layers': list(range(1, 10)),
+                       'num_layers': list(range(2, 9, 2)),
                        'embed_dim': [2 ** i for i in range(3, 8)],
                        "learning_rate": [10 ** -i for i in range(2, 4)],
                    },
