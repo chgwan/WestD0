@@ -195,9 +195,19 @@ class WestERT(nn.Module):
         self.ERT = nn.TransformerEncoder(
             encoder_layer=encoder_layer,
             num_layers=num_layers)
-        self.dense = nn.Linear(
+        self.restore_layer = nn.Linear(
             in_features=embed_dim,
             out_features=output_dim,)
+    
+    def forward(self, enc_inputs):
+        enc_inputs = self.enc_embed(enc_inputs)
+        maxlen = enc_inputs.size(1)
+        causal_mask = nn.Transformer.generate_square_subsequent_mask(
+            maxlen,
+            device=enc_inputs.device,)
+        enc_outputs = self.ERT(enc_inputs, causal_mask)
+        Y_hat = self.restore_layer(enc_outputs)
+        return Y_hat
 
 if __name__ == "__main__":
     batch_size = 1
@@ -210,11 +220,13 @@ if __name__ == "__main__":
     tgt_seq = torch.zeros(batch_size, seq_len, output_dim)
 
 
-    model = WestFormer(
-        input_dim,
-        embed_dim,
-        output_dim,
-        window_size=int(5 * 10 ** 4))
+    # model = WestFormer(
+    #     input_dim,
+    #     embed_dim,
+    #     output_dim,
+    #     window_size=int(5 * 10 ** 4))
+    
+    model = WestERT(input_dim, embed_dim, output_dim, window_size=int(5 * 10 ** 4))
     
     model.cuda()
     input_seq = input_seq.cuda()
