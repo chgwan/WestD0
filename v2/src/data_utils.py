@@ -5,6 +5,7 @@ import pandas as pd
 import os
 from private_modules.utilities import convert_hdf5_2dict
 import h5py
+from statsmodels.tsa.stattools import grangercausalitytests
 # # align data with the actual discharge start based on Ip_ref. 
 # def read_mat_file(mat_file: os.PathLike, nodes):
 #     data = loadmat(mat_file)
@@ -109,6 +110,27 @@ def filter_h5(h5):
         else:
             False   
 
+def granger_causality(arr0, arr1, maxlag: int = 4):
+    r""" Computes Granger causality from arr1 to arr0.
+    Args:
+        arr0 (np.ndarray): target variable, shape [L,]
+        arr1 (np.ndarray): predictor variable, shape [L,]
+        maxlag (int): maximum lag to consider in the Granger test.
+    Returns:
+        min_pval (float): the minimum p-value across all lags and test types.
+    """
+    data = np.column_stack([arr0, arr1])
+    result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
+    
+    test_names = ['ssr_ftest', 'ssr_chi2test', 'lrtest', 'params_ftest']
+    min_pval = float('inf')
+
+    for lag in result:
+        for name in test_names:
+            pval = result[lag][0][name][1]
+            if pval < min_pval:
+                min_pval = pval
+    return min_pval
 
 if __name__ == "__main__":
     read_all_scope("")
