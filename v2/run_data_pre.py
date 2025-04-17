@@ -11,6 +11,7 @@ import numpy as np
 from src import data_gen
 from src.data_utils import strongest_granger_causality
 from private_modules import load_yaml_config
+from private_modules.utilities import calc_corrcoef
 
 def get_nodes(config_f=None):
     if config_f is None:
@@ -88,7 +89,7 @@ def clear_h5():
     mp_run.mp_no_return_run_func(warp_clean, h5s)    
 
 
-def calc_gp(input_arr, output_arr, node_flags, maxlag=4):
+def calc_gp(input_arr, output_arr, node_flags, maxlag=4, option="gp"):
     input_dim = input_arr.shape[1] # in our case is 19
     output_dim = output_arr.shape[1] # in our case is 6
     p_matrix = np.zeros((input_dim, output_dim))
@@ -101,8 +102,11 @@ def calc_gp(input_arr, output_arr, node_flags, maxlag=4):
             unique_values = np.unique(sig_output.round(decimals=4))
             if node_flags[input_idx+output_idx] == 0 or len(unique_values) == 1:
                 p_matrix[:, output_idx] = np.nan
-                continue 
-            min_p = strongest_granger_causality(sig_output, sig_input, maxlag=maxlag)
+                continue
+            if option == "gp":
+                min_p = strongest_granger_causality(sig_output, sig_input, maxlag=maxlag)   
+            elif option == "zp":
+                min_p = calc_corrcoef(sig_input, sig_output)
             p_matrix[input_idx, output_idx] = min_p
     return p_matrix
 
@@ -125,7 +129,16 @@ def h5_p_matrix(h5_file):
     p_matrix = calc_gp(input_arr, output_arr, node_flags)
     return p_matrix
 
-def mp_h5_p_matrix(num_workers=64):
+def mp_h5_p_matrix(num_workers=64, option='gp'):
+    """  mp running the p_matrix calculation
+
+    Args:
+        num_workers (int): as name
+        option (Optional): `gp` or `zp`, 
+            `gp` means strongest granger causality p-value
+            `zp` means correlation coefficient p-value
+
+    """
     h5s_dir = os.path.expandvars('$DATABASE_PATH/DataBase/WEST/WestData')
     h5s_dir = pathlib.Path(h5s_dir)
     h5s = list(h5s_dir.glob("*.h5"))
@@ -136,7 +149,7 @@ def mp_h5_p_matrix(num_workers=64):
     p_arr = np.stack(p_matrix_list)
     # p_arr = np.mean(p_arr, axis=0)
     stat_dir = "Database/Stat"
-    p_arr_f = "p_matrix.npy"
+    p_arr_f = f"p_matrix_{option}.npy"
     p_arr_f = os.path.join(stat_dir, p_arr_f)
     np.save(p_arr_f, p_arr)
 
