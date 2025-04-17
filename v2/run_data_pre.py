@@ -125,13 +125,13 @@ def h5_p_matrix(h5_file):
     p_matrix = calc_gp(input_arr, output_arr, node_flags)
     return p_matrix
 
-def mp_h5_p_matrix():
+def mp_h5_p_matrix(num_workers=64):
     h5s_dir = os.path.expandvars('$DATABASE_PATH/DataBase/WEST/WestData')
     h5s_dir = pathlib.Path(h5s_dir)
     h5s = list(h5s_dir.glob("*.h5"))
 
     # h5s = h5s[:4]
-    my_mp_run = MpRun(num_workers=40)
+    my_mp_run = MpRun(num_workers)
     p_matrix_list = my_mp_run.mp_return_list_run_func(h5_p_matrix, h5s)
     p_arr = np.stack(p_matrix_list)
     # p_arr = np.mean(p_arr, axis=0)
