@@ -100,7 +100,7 @@ def calc_gp(input_arr, output_arr, node_flags, maxlag=4, option="gp"):
             continue
         for output_idx, sig_output in enumerate(output_arr.T):
             unique_values = np.unique(sig_output.round(decimals=4))
-            if node_flags[input_idx+output_idx] == 0 or len(unique_values) == 1:
+            if node_flags[input_dim+output_idx] == 0 or len(unique_values) == 1:
                 p_matrix[:, output_idx] = np.nan
                 continue
             if option == "gp":
@@ -113,7 +113,6 @@ def calc_gp(input_arr, output_arr, node_flags, maxlag=4, option="gp"):
 def h5_p_matrix(h5_file):
     filter_wz = 99
     filter_func = data_gen.SMA
-
     input_nodes, output_nodes = get_nodes()
     nodes = []
     nodes.extend(input_nodes)
