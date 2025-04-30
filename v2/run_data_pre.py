@@ -89,7 +89,7 @@ def clear_h5():
     mp_run.mp_no_return_run_func(warp_clean, h5s)    
 
 
-def calc_gp(input_arr, output_arr, node_flags, maxlag=4, option="gp"):
+def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
     input_dim = input_arr.shape[1] # in our case is 19
     output_dim = output_arr.shape[1] # in our case is 6
     p_matrix = np.zeros((input_dim, output_dim))
@@ -110,7 +110,7 @@ def calc_gp(input_arr, output_arr, node_flags, maxlag=4, option="gp"):
             p_matrix[input_idx, output_idx] = min_p
     return p_matrix
 
-def h5_p_matrix(h5_file):
+def h5_p_matrix(h5_file, option='gp', maxlag=4):
     filter_wz = 99
     filter_func = data_gen.SMA
     input_nodes, output_nodes = get_nodes()
@@ -125,10 +125,10 @@ def h5_p_matrix(h5_file):
     input_dim = len(input_nodes)
     input_arr = data[:, :input_dim]
     output_arr = data[:, input_dim:]
-    p_matrix = calc_gp(input_arr, output_arr, node_flags)
+    p_matrix = calc_gp(input_arr, output_arr, node_flags, option=option)
     return p_matrix
 
-def mp_h5_p_matrix(num_workers=64, option='gp'):
+def mp_h5_p_matrix(num_workers=64, option='gp', maxlag=4):
     """  mp running the p_matrix calculation
 
     Args:
@@ -144,7 +144,10 @@ def mp_h5_p_matrix(num_workers=64, option='gp'):
 
     # h5s = h5s[:4]
     my_mp_run = MpRun(num_workers)
-    p_matrix_list = my_mp_run.mp_return_list_run_func(h5_p_matrix, h5s)
+    p_matrix_list = my_mp_run.mp_return_list_run_func(h5_p_matrix, 
+                                                      h5s, 
+                                                      option, 
+                                                      maxlag)
     p_arr = np.stack(p_matrix_list)
     # p_arr = np.mean(p_arr, axis=0)
     stat_dir = "Database/Stat"
