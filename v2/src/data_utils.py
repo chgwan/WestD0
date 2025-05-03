@@ -3,7 +3,7 @@ from scipy.io import loadmat
 import numpy as np
 import pandas as pd
 import os
-from private_modules.utilities import convert_hdf5_2dict
+from private_modules.utilities import convert_hdf5_2dict, calc_corrcoef
 import h5py
 from statsmodels.tsa.stattools import grangercausalitytests
 # # align data with the actual discharge start based on Ip_ref. 
@@ -110,7 +110,7 @@ def filter_h5(h5):
         else:
             False   
 
-def granger_causality(arr0, arr1, maxlag: int = 4):
+def strongest_granger_causality(arr0, arr1, maxlag: int = 4):
     r""" Computes Granger causality from arr1 to arr0.
     Args:
         arr0 (np.ndarray): target variable, shape [L,]
@@ -120,7 +120,7 @@ def granger_causality(arr0, arr1, maxlag: int = 4):
         min_pval (float): the minimum p-value across all lags and test types.
     """
     data = np.column_stack([arr0, arr1])
-    result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
+    result = grangercausalitytests(data, maxlag=maxlag)
     
     test_names = ['ssr_ftest', 'ssr_chi2test', 'lrtest', 'params_ftest']
     min_pval = float('inf')
@@ -131,6 +131,27 @@ def granger_causality(arr0, arr1, maxlag: int = 4):
             if pval < min_pval:
                 min_pval = pval
     return min_pval
+
+def strongest_z_score(arr0, arr1, maxlag: int=4):
+    r""" computes z_score between arr0 and arr1.  
+    Args:
+        arr0 (np.ndarray): target variable, shape [L,]
+        arr1 (np.ndarray): predictor variable, shape [L,]
+        maxlag (int): maximum lag to consider in the correlation coefficient.
+    Returns:
+        max_zp (float): the maximum z-score across all lags
+    """
+    zps = []
+    for lag in range(maxlag + 1):
+        if lag == 0:
+            target_arr = arr0
+            pred_arr = arr1
+        else:
+            target_arr = arr0[lag:]
+            pred_arr = arr1[:-lag]
+        zp = calc_corrcoef(target_arr, pred_arr)
+        zps.append(np.abs(zp))
+    return np.max(zps)
 
 if __name__ == "__main__":
     read_all_scope("")
