@@ -107,7 +107,7 @@ def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
                 strongest_p = strongest_granger_causality(sig_output, sig_input, maxlag=maxlag)   
             elif option == "zp":
                 # strongest_p = calc_corrcoef(sig_input, sig_output)
-                strongest_p = strongest_z_score(sig_output, sig_input)
+                strongest_p = strongest_z_score(sig_output, sig_input, maxlag)
             p_matrix[input_idx, output_idx] = strongest_p
     return p_matrix
 
