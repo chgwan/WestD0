@@ -9,9 +9,9 @@ import h5py
 import shutil
 import numpy as np
 from src import data_gen
-from src.data_utils import strongest_granger_causality
+from src.data_utils import strongest_granger_causality, strongest_z_score
 from private_modules import load_yaml_config
-from private_modules.utilities import calc_corrcoef
+# from private_modules.utilities import calc_corrcoef
 
 def get_nodes(config_f=None):
     if config_f is None:
@@ -104,10 +104,11 @@ def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
                 p_matrix[:, output_idx] = np.nan
                 continue
             if option == "gp":
-                min_p = strongest_granger_causality(sig_output, sig_input, maxlag=maxlag)   
+                strongest_p = strongest_granger_causality(sig_output, sig_input, maxlag=maxlag)   
             elif option == "zp":
-                min_p = calc_corrcoef(sig_input, sig_output)
-            p_matrix[input_idx, output_idx] = min_p
+                # strongest_p = calc_corrcoef(sig_input, sig_output)
+                strongest_p = strongest_z_score(sig_output, sig_input)
+            p_matrix[input_idx, output_idx] = strongest_p
     return p_matrix
 
 def h5_p_matrix(h5_file, option='gp', maxlag=4):
