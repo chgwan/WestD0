@@ -17,6 +17,7 @@ from private_modules.utilities import load_yaml_config, convert_hdf5_2dict
 from scipy.stats import gaussian_kde
 import matplotlib.colors as mcolors
 from scipy.io import loadmat
+import pandas as pd
 
 
 def calc_metrics(h5_file, metric_names, output_mean_stds):
@@ -209,6 +210,52 @@ def plt_pred_shot(
     axes[1][-1].set_xlabel('Time [s]')
     plt.tight_layout()
     return fig
+
+def get_nodes(config_f=None):
+    if config_f is None:
+        config_f = "$HOME/Papers/WestD0/v2/configs/former.yml"
+    config_f = os.path.expandvars(config_f)
+    config = load_yaml_config(config_f)
+    data_params = config["data"]
+
+    input_list = data_params['input_list']
+    output_list = data_params['output_list']
+    input_nodes, output_nodes = [], []
+    for dummy_list_name in input_list:
+        if "_real" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-5]
+            i = 3
+        if "_ref" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-4]
+            i = 0
+        input_nodes.extend([f"{dummy_node}_{i}" for dummy_node in config['nodes'][dummy_list_name]])
+    for dummy_list_name in output_list:
+        output_nodes.extend(config['nodes'][dummy_list_name])
+    return input_nodes, output_nodes
+
+def calc_metrics(h5_file, metric_names, MS_f=None, config_f=None):
+    if MS_f is None:
+        MS_file = '$HOME/Papers/WestD0/v2/Database/Stat/h5_global_MS.csv'
+        MS_file = os.path.expanduser(MS_file)
+        MS_df = pd.read_csv(MS_file, index_col=0)  
+    input_nodes, output_nodes = get_nodes(config_f)   
+    output_mean_stds = MS_df.loc[:, output_nodes].to_numpy()  
+    metrics = dict({})
+    with h5py.File(h5_file) as hf:
+        Y_hat = hf['Y_hat'][()]
+        Y_tgt = hf['Y_tgt'][()]
+    
+    Y_hat = (Y_hat - output_mean_stds[:, 0]) / output_mean_stds[:, 1]
+    Y_tgt = (Y_tgt - output_mean_stds[:, 0]) / output_mean_stds[:, 1]
+    # calc metrics
+    if 'r2' in metric_names:
+        r2 = r2_score(Y_tgt, Y_hat)
+        metrics['r2'] = r2
+    if 'mse' in metric_names:
+        mse = np.sqrt((Y_hat - Y_tgt) ** 2)
+        metrics['mse'] = mse
+    metrics['file'] = str(h5_file)
+    return metrics
 
 if __name__ == "__main__":
     pass
