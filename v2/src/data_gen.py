@@ -29,6 +29,8 @@ def read_h5_tokamak(
         dtype=np.float32,
         **kwargs):
     rare_cap = kwargs.get('rare_cap', 1)
+    # for debug and fair comparison. 
+    non_filter_nodes = kwargs.get('non_filter_nodes', [])
     filter_func = kwargs['filter_func']
     filter_wz = kwargs['filter_wz'] # filter window size
     half_filter_wz = filter_wz // 2
@@ -73,7 +75,8 @@ def read_h5_tokamak(
                     nodeData,
                     posinf=inf_value,
                     neginf=-inf_value,)
-                nodeData = filter_func(nodeData, filter_wz)
+                if node not in non_filter_nodes:
+                    nodeData = filter_func(nodeData, filter_wz)
                 # if the times length is unsame with nodeData length
                 assert len(timeAxis) == len(nodeData), \
                     "file: %s, Node:%s" % (h5_file, node)
