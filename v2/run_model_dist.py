@@ -141,7 +141,7 @@ def main_run(config):
         "MLP": {"train": qkmodels.MLP,
                 'build_model': build_model_MLP,
                 # "loss_fn": utils.calc_loss_MLP,
-                "loss_fn": utils.calc_loss_MLP,
+                "loss_fn": utils.calc_loss_Former,
                 "infer_fn": utils.inference_fn,
                 "search_space": {
                     'num_layers': list(range(1, 5, 2)),
