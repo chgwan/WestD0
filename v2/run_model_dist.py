@@ -77,7 +77,8 @@ def main_run(config):
     shuffle = data_params['shuffle']
     if shuffle:
         random.shuffle(h5s)
-    filter_wz = 99
+    # filter_wz = 99 # the filter window_size. 
+    filter_wz = data_params.get('filter_wz', 99)
     filter_func = data_gen.SMA
     my_data_gen = data_gen.H5GenDataLoader(
         h5s=h5s,
@@ -160,24 +161,36 @@ def main_run(config):
                      },
                      },
         "Former": {"train": mlmodels.WestFormer,
-                   "build_model": build_model_Former,
+                   "build_model": build_model_former,
                 #    "loss_fn": partial(utils.calc_loss_Former, **train_params,),
                     "loss_fn": utils.calc_loss_Former,
+                    "infer_fn":utils.inference_fn,
                    "search_space": {
                        'num_layers': list(range(2, 9, 2)),
                        'embed_dim': [2 ** i for i in range(3, 8)],
-                       "learning_rate": [10 ** -i for i in range(2, 4)],
+                       "learning_rate": [10 ** -(i/2) for i in range(1, 9)],
                    },
                    },
-        # "ERT": {"train": mlmodels.RZIpERT,
-        #         "build_model": build_model_ERT,
-        #         "loss_fn": partial(utils.calc_loss_RNN_sstf, **train_params,),
-        #         "search_space": {
-        #             'num_layers': tune.qrandint(2, 10, 1),
-        #             # 'num_layers': tune.sample_from(lambda spec: 2 ** spec.config.uniform),
-        #             "learning_rate": tune.qloguniform(1e-4, 1e-1, 5e-5),
-        #         },
-        #         },
+        "ERT": {"train": mlmodels.WestERT,
+                "build_model": partial(build_model_former, model_type="ERT"),
+                "loss_fn": utils.calc_loss_Former,
+                "infer_fn":utils.inference_fn,
+                "search_space": {
+                    'num_layers': list(range(1, 9)),
+                    'embed_dim': [2 ** i for i in range(3, 8)],
+                    "learning_rate": [10 ** -i for i in range(1, 4)],
+                },
+                },
+        "GPT": {"train": mlmodels.WestGPT,
+                "build_model": partial(build_model_former, model_type="GPT"),
+                "loss_fn": utils.calc_loss_Former,
+                "infer_fn":utils.inference_fn,
+                "search_space": {
+                    'num_layers': list(range(1, 9)),
+                    'embed_dim': [2 ** i for i in range(3, 8)],
+                    "learning_rate": [10 ** -i for i in range(1, 4)],
+                },
+                },
     }
 
     model_name = model_params['name']
@@ -282,7 +295,7 @@ def build_model_RNN(search_space):
     return model
 
 
-def build_model_Former(search_space):
+def build_model_former(search_space, model_type="Former"):
     model_params = config['model']
     input_dim = model_params['input_dim']
     # embed_dim = model_params['embed_dim']
@@ -294,36 +307,33 @@ def build_model_Former(search_space):
     num_layers = search_space['num_layers']
     embed_dim = search_space['embed_dim']
 
-    model = mlmodels.WestFormer(
-        input_dim=input_dim,
-        embed_dim=embed_dim,
-        output_dim=output_dim,
-        window_size=window_size,
-        num_layers=num_layers,
-        dropout_rate=dropout_rate,
-        noise_ratio=noise_ratio,)
-    return model
-
-
-def build_model_ERT(search_space):
-    model_params = config['model']
-    input_dim = model_params['input_dim']
-    embed_dim = model_params['embed_dim']
-    output_dim = model_params['output_dim']
-    dropout_rate = model_params['dropout_rate']
-    noise_ratio = model_params['noise_ratio']
-    window_size = model_params['window_size']
-
-    num_layers = search_space['num_layers']
-
-    model = mlmodels.WestERT(
-        input_dim=input_dim,
-        embed_dim=embed_dim,
-        output_dim=output_dim,
-        window_size=window_size,
-        num_layers=num_layers,
-        dropout_rate=dropout_rate,
-        noise_ratio=noise_ratio,)
+    if model_type == "Former":
+        model = mlmodels.WestFormer(
+            input_dim=input_dim,
+            embed_dim=embed_dim,
+            output_dim=output_dim,
+            window_size=window_size,
+            num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            noise_ratio=noise_ratio,)
+    if model_type == "ERT":
+        model = mlmodels.WestERT(
+            input_dim=input_dim,
+            embed_dim=embed_dim,
+            output_dim=output_dim,
+            window_size=window_size,
+            num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            noise_ratio=noise_ratio,)
+    if model_type == "GPT":
+        model = mlmodels.WestGPT(
+            input_dim=input_dim,
+            embed_dim=embed_dim,
+            output_dim=output_dim,
+            window_size=window_size,
+            num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            noise_ratio=noise_ratio,)                
     return model
 
 
