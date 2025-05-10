@@ -95,11 +95,13 @@ def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
     p_matrix = np.zeros((input_dim, output_dim))
     for input_idx, sig_input in enumerate(input_arr.T):
         unique_values = np.unique(sig_input.round(decimals=4))
-        if node_flags[input_idx] == 0 or len(unique_values) < 10:
+        if node_flags[input_idx] == 0 or len(unique_values) == 1:
+            #TODO: choose a different way to deal with Pha1-2 and LHW2
             p_matrix[input_idx, :] = np.nan
             continue
         for output_idx, sig_output in enumerate(output_arr.T):
             unique_values = np.unique(sig_output.round(decimals=4))
+            # output did not have any missing values.
             if node_flags[input_dim+output_idx] == 0 or len(unique_values) < 10:
                 p_matrix[:, output_idx] = np.nan
                 continue
