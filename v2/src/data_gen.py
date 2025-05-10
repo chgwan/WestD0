@@ -28,13 +28,14 @@ def read_h5_tokamak(
         nodes:List[LiteralString],
         dtype=np.float32,
         **kwargs):
+    rare_cap = kwargs.get('rare_cap', 1)
     filter_func = kwargs['filter_func']
     filter_wz = kwargs['filter_wz'] # filter window size
     half_filter_wz = filter_wz // 2
     with h5py.File(h5_file, mode="r") as hf:
         timeAxis = hf["time"][()]
-        Ip_ref = hf['Ip_scope_0'][()]
-        Ip_TFEnd = findTFEnd(Ip_ref, timeAxis, 500)
+        # Ip_ref = hf['Ip_scope_0'][()]
+        # Ip_TFEnd = findTFEnd(Ip_ref, timeAxis, 500)
         # Beta_normal = hf['beta_normal'][()]
         # Beta_n_TFEnd = findTFEnd(Beta_normal, timeAxis, 0.03)
         # TFEnd = min(Ip_TFEnd, Beta_n_TFEnd)
@@ -61,7 +62,7 @@ def read_h5_tokamak(
             # col = db[node]
             # nodeDict = col.find_one({"shot":shot})
             # `Node` means inexistence.
-            if hf[node].shape is None or len(np.unique(hf[node][()])) == 1:
+            if hf[node].shape is None or len(np.unique(hf[node][()])) <= rare_cap:
                 nodeData = np.zeros_like(timeAxis, dtype=dtype)
                 node_flags.append(0)
             else:
