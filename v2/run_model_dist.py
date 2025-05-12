@@ -80,20 +80,41 @@ def main_run(config):
     # filter_wz = 99 # the filter window_size. 
     filter_wz = data_params.get('filter_wz', 99)
     filter_func = data_gen.SMA
-    my_data_gen = data_gen.H5GenDataLoader(
-        h5s=h5s,
-        input_nodes=input_nodes,
-        output_nodes=output_nodes,
-        batch_size=data_params['batch_size'] * world_size,
-        num_workers=data_params['num_workers'],
-        DS=data_gen.StdWESTShotDS,
-        MS_df=MS_df,
-        stat_df=stat_df,
-        pin_memory=True,
-        world_size=world_size,
-        filter_func = filter_func, 
-        filter_wz = filter_wz,
-    )
+    is_output_filter = train_params.get('is_output_filter', True)
+    if is_output_filter:
+        # filter output nodes.
+        my_data_gen = data_gen.H5GenDataLoader(
+            h5s=h5s,
+            input_nodes=input_nodes,
+            output_nodes=output_nodes,
+            batch_size=data_params['batch_size'] * world_size,
+            num_workers=data_params['num_workers'],
+            DS=data_gen.StdWESTShotDS,
+            MS_df=MS_df,
+            stat_df=stat_df,
+            pin_memory=True,
+            world_size=world_size,
+            filter_func = filter_func, 
+            filter_wz = filter_wz,
+            non_filter_nodes = [],
+        )
+    else:
+        # non-filter output nodes
+        my_data_gen = data_gen.H5GenDataLoader(
+            h5s=h5s,
+            input_nodes=input_nodes,
+            output_nodes=output_nodes,
+            batch_size=data_params['batch_size'] * world_size,
+            num_workers=data_params['num_workers'],
+            DS=data_gen.StdWESTShotDS,
+            MS_df=MS_df,
+            stat_df=stat_df,
+            pin_memory=True,
+            world_size=world_size,
+            filter_func = filter_func, 
+            filter_wz = filter_wz,
+            non_filter_nodes = output_nodes,
+        )    
     ratio_list = data_params.get('ratios', [0.8, 0.1, 0.1])
     my_data_gen.set_split_ratio(ratio_list)
     # my_data_gen.set_split_ratio([0.8, 0.1, 0.1])
