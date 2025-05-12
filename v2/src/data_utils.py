@@ -98,6 +98,8 @@ def findTFEnd(Ip_ref, time):
     return TFEnd
 
 def filter_h5(h5):
+    """ check the h5 validity 
+    """
     with h5py.File(h5, 'r') as hf:
         Ip_ref = hf['Ip_scope_0'][()]
         time = hf['time'][()]
