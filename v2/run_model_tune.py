@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+#! Depracated!!
 import argparse
 import pathlib
 import torch
@@ -15,6 +16,8 @@ import numpy as np
 import time
 import random
 from functools import partial
+
+print("This script was deprecated")
 
 # add more length mask in the future. 
 @tools.ray_start
