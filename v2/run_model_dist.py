@@ -140,12 +140,16 @@ def main_run(config):
     train_params.update(config['summary'])
     train_base_dir = os.path.join(base_dir, config['summary']['root_dir'])
     pathlib.Path(train_base_dir).mkdir(exist_ok=True)
-    if train_params['train_type'] == "restore":
+    if args.model_path is None:
+        train_type = train_params['train_type']
+    else:
+        train_type = "inference"
+    if train_type == "restore":
         train_params['checkpoint_path'] = os.path.join(
             base_dir,
             train_params['checkpoint_path'],
         )
-    elif train_params['train_type'] == "train" or train_params['train_type'] == "tune":
+    elif train_type == "train" or train_type == "tune":
         clean_dir(train_base_dir)
     model_pair_dict = {
         # "RNN": {"train": mlmodels.RNN_TransSS,
@@ -241,9 +245,9 @@ def main_run(config):
     screen_print(f"Total parameters: {total_params / 1e3:.0f} K")
     # torch.cuda.reset_peak_memory_stats()
     start = time.time()
-    if train_params['train_type'] == "train" or train_params['train_type'] == "restore":            
+    if train_type == "train" or train_type == "restore":            
         my_model_train.run_train(model)
-    elif train_params['train_type'] == "inference":
+    elif train_type == "inference":
         model_path = args.model_path.strip()
         model.load_state_dict(torch.load(model_path, weights_only=True, map_location='cpu'))
 
@@ -265,7 +269,7 @@ def main_run(config):
             **model_params, # model_type
         ) 
         my_model_infer.run_infer(model)
-    elif train_params['train_type'] == "tune" or train_params['train_type'] == "tune-restore":
+    elif train_type == "tune" or train_type == "tune-restore":
         num_samples = train_params['num_trials']
         search_space = model_pairs['search_space']
         my_model_train.run_tune(num_samples, model_pairs['build_model'], search_space)
@@ -387,7 +391,6 @@ def parse_args():
         help="The function you want to run",
         required=False,
     )
-    
     args = parser.parse_args()
     return args
 
