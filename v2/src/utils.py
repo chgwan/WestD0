@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-from scipy.io import loadmat
 import os
 import numpy as np
-import pandas as pd
 import torch
 from private_modules.Torch import tools
 from private_modules.utilities import save_to_file, screen_print
-import h5py
-import pickle
-from torch import nn
-from tqdm import tqdm
+from private_modules import load_yaml_config
 import math
 
 def calc_loss_MLP(
@@ -202,3 +197,25 @@ def calc_loss_Former(
         #                         f"start_idx: {start_idx} "
         #                         f"sequence length: {seq_len} ")
         yield loss
+
+def get_nodes(config_f=None):
+    if config_f is None:
+        config_f = "$HOME/Papers/WestD0/v2/configs/former.yml"
+    config_f = os.path.expandvars(config_f)
+    config = load_yaml_config(config_f)
+    data_params = config["data"]
+
+    input_list = data_params['input_list']
+    output_list = data_params['output_list']
+    input_nodes, output_nodes = [], []
+    for dummy_list_name in input_list:
+        if "_real" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-5]
+            i = 3
+        if "_ref" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-4]
+            i = 0
+        input_nodes.extend([f"{dummy_node}_{i}" for dummy_node in config['nodes'][dummy_list_name]])
+    for dummy_list_name in output_list:
+        output_nodes.extend(config['nodes'][dummy_list_name])
+    return input_nodes, output_nodes
