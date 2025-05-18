@@ -10,31 +10,8 @@ import h5py
 import shutil
 import numpy as np
 from src import data_gen
-from src.data_utils import strongest_granger_causality, strongest_z_score
-from private_modules import load_yaml_config
+from src.data_utils import strongest_granger_causality, strongest_z_score, get_nodes
 # from private_modules.utilities import calc_corrcoef
-
-def get_nodes(config_f=None):
-    if config_f is None:
-        config_f = "$HOME/Papers/WestD0/v2/configs/former.yml"
-    config_f = os.path.expandvars(config_f)
-    config = load_yaml_config(config_f)
-    data_params = config["data"]
-
-    input_list = data_params['input_list']
-    output_list = data_params['output_list']
-    input_nodes, output_nodes = [], []
-    for dummy_list_name in input_list:
-        if "_real" in dummy_list_name: 
-            dummy_list_name = dummy_list_name[:-5]
-            i = 3
-        if "_ref" in dummy_list_name: 
-            dummy_list_name = dummy_list_name[:-4]
-            i = 0
-        input_nodes.extend([f"{dummy_node}_{i}" for dummy_node in config['nodes'][dummy_list_name]])
-    for dummy_list_name in output_list:
-        output_nodes.extend(config['nodes'][dummy_list_name])
-    return input_nodes, output_nodes
 
 def save_merge():
     def warp_merge(shot):
