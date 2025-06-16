@@ -281,8 +281,9 @@ def plt_pred_h5_vertically(
     ):
     shot = int(os.path.basename(h5_file)[:-3])
     node_map = dict({
+        'Ohmic': ['PowLH1_scope_3'],
         'LHW': ["PowLH1_scope_3", "PowLH2_scope_3"],
-        'ICRH': ["PowIC1_scope", "PowIC2_scope", "PowIC3_scope",],
+        'ICRH': ["PowIC1_scope_3", "PowIC2_scope_3", "PowIC3_scope_3",],
     })
     name_unit_map = {'LHW': 'LHW [W]',
                      'ICRH': 'ICRH [W]',
@@ -312,12 +313,13 @@ def plt_pred_h5_vertically(
         ax = axes[idx]
         for sig_node_data in node_data.T:
             ax.plot(X, sig_node_data, c=colors_cycle[idx])
-        ax.text(0.5, 0.85, f"{dummy_hs} heating", transform=ax.transAxes,
-                ha='center', va='center')
+        text = dummy_hs
+        if dummy_hs == 'Ohmic':
+            text = 'No auxiliary'
+        ax.text(0.2, 0.85, f"{text} heating", transform=ax.transAxes,
+                    ha='center', va='center')
         name_unit = name_unit_map.get(dummy_hs, None)
-        print(name_unit_map)
         ax.set_ylabel(name_unit)
-        
     
     for node_idx, name in enumerate(nodes_name):
         row_idx = node_idx + len(hs_in_use)
@@ -334,6 +336,7 @@ def plt_pred_h5_vertically(
             X, 
             Y_hat[:, node_idx], 
             # c = 'r-', 
+            ls = '--',
             # marker=markers[0],
             # markevery=10,
             lw=lw,
@@ -345,6 +348,6 @@ def plt_pred_h5_vertically(
         ax.legend(loc='upper right')
     
     axes[-1].set_xlabel('Time [s]')
-    fig.suptitle(f'West shot: {shot}')
+    fig.suptitle(f' West shot: {shot}')
     return fig
             
