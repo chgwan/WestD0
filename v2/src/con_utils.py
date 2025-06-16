@@ -278,6 +278,7 @@ def plt_pred_h5_vertically(
     hs_in_use = ['LHW'],
     filter_wz = None, 
     fkwargs = dict({}),
+    sub_order = None, 
     ):
     shot = int(os.path.basename(h5_file)[:-3])
     node_map = dict({
@@ -348,6 +349,6 @@ def plt_pred_h5_vertically(
         ax.legend(loc='upper right')
     
     axes[-1].set_xlabel('Time [s]')
-    fig.suptitle(f' West shot: {shot}')
+    fig.suptitle(f'{sub_order} West shot: {shot}')
     return fig
             
