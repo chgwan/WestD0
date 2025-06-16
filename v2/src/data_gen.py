@@ -14,14 +14,15 @@ import h5py
 import os
 from typing import LiteralString, List
 
-def findTFEnd(Ip_ref, time, gradient_limit=500):
+def findTF(Ip_ref, time, gradient_limit=500):
     # Ip_ref TopFlat in 6 digits.
     IpMax = max(Ip_ref)
     third_Ip = IpMax // 3
     ids = Ip_ref > third_Ip
     d_Ip_ids = np.abs(np.gradient(Ip_ref, time)) < gradient_limit
     TFEnd = time[d_Ip_ids & ids][-1]
-    return TFEnd
+    TFStart = time[d_Ip_ids & ids][0]
+    return TFStart, TFEnd
 # Tested the Beta_end + slightly increase, it seems lots of errors
 def read_h5_tokamak(
         h5_file:os.PathLike, 
@@ -41,6 +42,7 @@ def read_h5_tokamak(
         # Beta_normal = hf['beta_normal'][()]
         # Beta_n_TFEnd = findTFEnd(Beta_normal, timeAxis, 0.03)
         # TFEnd = min(Ip_TFEnd, Beta_n_TFEnd)
+        
         # only select the IMAS time scope.
         IMAS_time = hf['IMAS_time'][()]
         IMAS_start, IMAS_end = IMAS_time[0], IMAS_time[-1]
@@ -77,6 +79,9 @@ def read_h5_tokamak(
                     neginf=-inf_value,)
                 if node not in non_filter_nodes:
                     nodeData = filter_func(nodeData, filter_wz)
+                else:
+                    # align the data. 
+                    nodeData = nodeData[half_filter_wz:-half_filter_wz]
                 # if the times length is unsame with nodeData length
                 assert len(timeAxis) == len(nodeData), \
                     "file: %s, Node:%s" % (h5_file, node)
