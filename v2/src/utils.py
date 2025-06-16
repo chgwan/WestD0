@@ -104,7 +104,7 @@ def inference_fn(
         h5_dict['Y_hat'] = h5_Y_hat
         h5_dict['Y_tgt'] = h5_Y_tgt
         save_to_file(h5_file, h5_dict) 
-        loss = np.mean((((h5_Y_hat - h5_Y_tgt) - mean_arr) / stDev_arr) ** 2) 
+        loss = np.mean(((h5_Y_hat - h5_Y_tgt) / stDev_arr) ** 2) 
         with open(res_path, 'a') as f:
             f.write(f"{loss:.5f}, {tail_name} \n")
     return loss_accum / slice_num
