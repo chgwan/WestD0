@@ -10,6 +10,7 @@ Temp
 TEST/
 push.sh
 pull.sh
+*.pbs
 # All .npy files are stored source data
 *.npy
 # ignore all . start files
