@@ -3,7 +3,8 @@ from scipy.io import loadmat
 import numpy as np
 import pandas as pd
 import os
-from private_modules.utilities import convert_hdf5_2dict, calc_corrcoef
+from private_modules import convert_hdf5_2dict
+from private_modules.utils.com_tools import calc_corrcoef
 import h5py
 from statsmodels.tsa.stattools import grangercausalitytests
 # # align data with the actual discharge start based on Ip_ref. 

@@ -17,12 +17,14 @@ from sklearn.metrics import r2_score
 
 from . import data_gen
 from .utils import get_nodes
-from private_modules.utilities import convert_hdf5_2dict
+from private_modules import convert_hdf5_2dict, load_yaml_config, strpath2path
+
 plt.style.use('seaborn-v0_8-paper')
 plt.ioff()
 
 default_config_f = "$HOME/Papers/WestD0/v2/configs/former.yml"
-default_config_f = os.path.expandvars(default_config_f)
+default_config_f = strpath2path(default_config_f)
+default_config = load_yaml_config(default_config_f)
 
 
 def calc_r2_nodes(pred_h5, org_h5):
@@ -108,7 +110,7 @@ def scatter_list(r2s_list, plt_func, **kwargs):
 def scatter_r2s(r2s, 
                 sub_gs:gridspec.GridSpec, 
                 ylabel:str, 
-                signal_name:str, 
+                f_id: int, 
                 fig):
     """  
     """
@@ -130,7 +132,7 @@ def scatter_r2s(r2s,
     sns.histplot(y=r2s, color="b", kde=True, ax=ax1, linewidth=0)
     ax1.set_xlabel("")
     avg_sim = np.mean(r2s)
-    ax0.set_title(fr"{signal_name}'s average {ylabel} is {avg_sim:.3f}")
+    ax0.set_title(fr"{f_id} Average {ylabel} is {avg_sim:.3f}")
     return fig
 
 
@@ -197,7 +199,7 @@ def plt_pred_h5(
         # if node_idx == 3:
         ax.set_ylim(ymax=max(Y_tgt[:, node_idx]) * 1.15)
         ax.legend(loc='upper right')
-    fig.suptitle(f'West shot: {shot}')
+    fig.suptitle(f'West discharge #{shot}')
     # axes[0].set_title(f'West shot: {shot}')
     for i in range(n_cols):
         axes[-1][i].set_xlabel('Time [s]')
@@ -302,7 +304,7 @@ def plt_pred_h5_vertically(
     n_rows = len(nodes_name) + len(hs_in_use)
     n_cols = 1
     fig, axes = plt.subplots(n_rows, n_cols, 
-                             figsize=[6.8 * n_cols, 4.8 * n_rows], 
+                             figsize=[6.8 * n_cols, 4.8 * n_rows / 2.2], 
                              sharex=True,
                              **fkwargs,)
     
@@ -317,7 +319,7 @@ def plt_pred_h5_vertically(
         text = dummy_hs
         if dummy_hs == 'Ohmic':
             text = 'No auxiliary'
-        ax.text(0.2, 0.85, f"{text} heating", transform=ax.transAxes,
+        ax.text(0.5, 0.85, f"{text} heating", transform=ax.transAxes,
                     ha='center', va='center')
         name_unit = name_unit_map.get(dummy_hs, None)
         ax.set_ylabel(name_unit)
@@ -351,4 +353,41 @@ def plt_pred_h5_vertically(
     axes[-1].set_xlabel('Time [s]')
     fig.suptitle(f'{sub_order} West shot: {shot}')
     return fig
-            
+
+def average_pred_value_ft(src_h5, pred_h5, nodes, filter_wz):
+    input_nodes, output_nodes = get_nodes(default_config_f)
+    with h5py.File(pred_h5, 'r') as hf:
+        Y_hat = hf['Y_hat'][()]
+        Y_tgt = hf["Y_tgt"][()]
+    nodes_average_list = [[] for _ in range(3)]
+    shot = int(os.path.basename(src_h5)[:-3])
+    nodes_average_list[-1].append(shot)
+    with h5py.File(src_h5, 'r') as hf:
+        timeAxis = hf['time'][()]
+        # only select the IMAS time scope.
+        IMAS_time = hf['IMAS_time'][()]
+        IMAS_start, IMAS_end = IMAS_time[0], IMAS_time[-1]
+        time_start = IMAS_start
+        time_end = IMAS_end
+        ids0 = timeAxis >= time_start
+        ids1 = timeAxis < time_end
+        ids = ids0 & ids1   
+
+        Ip_ref = hf['Ip_scope_0'][()]
+        TFStart, TFEnd = data_gen.findTF(Ip_ref, timeAxis)
+        
+        half_filter_wz = filter_wz // 2
+        timeAxis = timeAxis[ids]
+        timeAxis = timeAxis[half_filter_wz: - half_filter_wz]
+        
+        ids = (TFStart < timeAxis) & (timeAxis < TFEnd)
+        for node in nodes:
+            node_data_tgt = hf[node][()]
+            node_idx = output_nodes.index(node)
+            node_data_hat = Y_hat[:, node_idx]
+            node_data_hat = node_data_hat[ids]
+            node_mean_tgt = np.mean(node_data_tgt)
+            node_mean_hat = np.mean(node_data_hat)
+            nodes_average_list[0].append(node_mean_hat)
+            nodes_average_list[1].append(node_mean_tgt)
+    return nodes_average_list
