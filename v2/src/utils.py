@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 from private_modules.Torch import tools
-from private_modules.utilities import save_to_file, screen_print
+from private_modules import save_to_file, screen_print
 from private_modules import load_yaml_config
 import math
 

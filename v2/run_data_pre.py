@@ -3,7 +3,7 @@
 import pathlib
 import os
 from src.data_utils import merge_mat_h5, filter_h5
-from private_modules.utilities import save_to_file, parse_args, MpRun
+from private_modules import save_to_file, parse_args, MpRun
 from private_modules.FedData import stat_node
 from tqdm import tqdm
 import h5py

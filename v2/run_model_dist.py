@@ -250,9 +250,12 @@ def main_run(config):
     elif train_type == "inference":
         model_path = args.model_path.strip()
         model.load_state_dict(torch.load(model_path, weights_only=True, map_location='cpu'))
-
-        hat_data_dir = os.path.join(
-            base_dir, f'Database/Model_Infer_data/{model_name}')
+        if args.model_id is None:
+            hat_data_dir = os.path.join(
+                base_dir, f'Database/Model_Infer_data/{model_name}')
+        else:
+            hat_data_dir = os.path.join(
+                base_dir, f'Database/Model_Infer_data/{model_name}-{args.model_id}')
         hat_data_dir = pathlib.Path(hat_data_dir)
         hat_data_dir.mkdir(exist_ok=True)      
         clean_dir(hat_data_dir)
@@ -374,6 +377,12 @@ def parse_args():
     parser.add_argument(
         "--model-path",
         type=str,
+        help="The function you want to run",
+        required=False,
+    )
+    parser.add_argument(
+        "--model-id",
+        type=int,
         help="The function you want to run",
         required=False,
     )

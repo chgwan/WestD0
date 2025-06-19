@@ -13,30 +13,12 @@ import math
 
 from sklearn.metrics import r2_score
 
-from private_modules.utilities import load_yaml_config, convert_hdf5_2dict
+from private_modules import load_yaml_config, convert_hdf5_2dict
 from scipy.stats import gaussian_kde
 import matplotlib.colors as mcolors
 from scipy.io import loadmat
 import pandas as pd
 
-
-def calc_metrics(h5_file, metric_names, output_mean_stds):
-    metrics = dict({})
-    with h5py.File(h5_file) as hf:
-        Y_hat = hf['Y_hat'][()]
-        Y_tgt = hf['Y_tgt'][()]
-    
-    Y_hat = (Y_hat - output_mean_stds[0, :]) / output_mean_stds[1, :]
-    Y_tgt = (Y_tgt - output_mean_stds[0, :]) / output_mean_stds[1, :]
-    # calc metrics
-    if 'r2' in metric_names:
-        r2 = r2_score(Y_tgt, Y_hat)
-        metrics['r2'] = r2
-    if 'mse' in metric_names:
-        mse = np.sqrt(np.mean((Y_hat - Y_tgt) ** 2))
-        metrics['mse'] = mse
-    metrics['file'] = str(h5_file)
-    return metrics 
 
 def scatter_list(r2s_list, plt_func, **kwargs):
     plt.close('all')
@@ -87,7 +69,7 @@ def plt_h5(h5_file, nodes):
     nodes_num = len(nodes)
     ncols = 2 
     nrows = math.ceil(nodes_num / ncols)
-    fig_kwargs = {"constrained_layout": False,
+    fig_kwargs = {"constrained_layout": True,
                 "figsize": (6.8 * ncols, 4.8 * nrows),
                 "dpi": 300}
     lw = 1.5
@@ -109,7 +91,7 @@ def plt_h5(h5_file, nodes):
     axes[0][-1].set_xlabel('Time [s]')
     axes[1][-1].set_xlabel('Time [s]')
     fig.suptitle(f'Shot: {shot}')
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
 
 def plot_all_scopes(mat_file_path):
@@ -208,7 +190,7 @@ def plt_pred_shot(
     # axes[0].set_title(f'West shot: {shot}')
     axes[0][-1].set_xlabel('Time [s]')
     axes[1][-1].set_xlabel('Time [s]')
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
 
 def get_nodes(config_f=None):
@@ -233,7 +215,7 @@ def get_nodes(config_f=None):
         output_nodes.extend(config['nodes'][dummy_list_name])
     return input_nodes, output_nodes
 
-def calc_metrics(h5_file, metric_names, MS_f=None, config_f=None):
+def calc_metrics(h5_file, metric_names, strip_length=0, MS_f=None, config_f=None, ):
     if MS_f is None:
         MS_file = '$HOME/Papers/WestD0/v2/Database/Stat/h5_global_MS.csv'
         MS_file = os.path.expanduser(MS_file)
@@ -244,6 +226,9 @@ def calc_metrics(h5_file, metric_names, MS_f=None, config_f=None):
     with h5py.File(h5_file) as hf:
         Y_hat = hf['Y_hat'][()]
         Y_tgt = hf['Y_tgt'][()]
+        if strip_length != 0:
+            Y_hat = Y_hat[strip_length:-strip_length]
+            Y_tgt = Y_tgt[strip_length:-strip_length]
     
     Y_hat = (Y_hat - output_mean_stds[:, 0]) / output_mean_stds[:, 1]
     Y_tgt = (Y_tgt - output_mean_stds[:, 0]) / output_mean_stds[:, 1]
