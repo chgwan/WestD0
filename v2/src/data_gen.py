@@ -17,8 +17,9 @@ from typing import LiteralString, List
 def findTF(Ip_ref, time, gradient_limit=500):
     # Ip_ref TopFlat in 6 digits.
     IpMax = max(Ip_ref)
-    third_Ip = IpMax // 3
-    ids = Ip_ref > third_Ip
+    IpMin = min(Ip_ref)
+    threshold_Ip = IpMax * 0.8 + IpMin * 0.2
+    ids = Ip_ref > threshold_Ip
     d_Ip_ids = np.abs(np.gradient(Ip_ref, time)) < gradient_limit
     TFEnd = time[d_Ip_ids & ids][-1]
     TFStart = time[d_Ip_ids & ids][0]
