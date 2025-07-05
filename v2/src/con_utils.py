@@ -5,6 +5,7 @@ import os
 import pathlib
 
 import h5py
+import matplotlib as mpl
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
@@ -15,9 +16,13 @@ from scipy.io import loadmat
 from scipy.stats import gaussian_kde
 from sklearn.metrics import r2_score
 
+from private_modules import convert_hdf5_2dict, load_yaml_config, strpath2path
 from . import data_gen
 from .utils import get_nodes
-from private_modules import convert_hdf5_2dict, load_yaml_config, strpath2path
+from typing import *
+
+import warnings
+warnings.filterwarnings("error", category=RuntimeWarning)
 
 plt.style.use('seaborn-v0_8-paper')
 plt.ioff()
@@ -25,6 +30,10 @@ plt.ioff()
 default_config_f = "$HOME/Papers/WestD0/v2/configs/former.yml"
 default_config_f = strpath2path(default_config_f)
 default_config = load_yaml_config(default_config_f)
+
+default_ms_f = '$HOME/Papers/WestD0/v2/Database/Stat/h5_global_MS.csv'
+default_ms_f = strpath2path(default_ms_f)
+
 
 
 def calc_r2_nodes(pred_h5, org_h5):
@@ -54,10 +63,47 @@ def calc_r2_nodes(pred_h5, org_h5):
     Y_tgt_avg = np.average(Y_tgt[TF_start_idx:TF_end_idx])
     return Y_hat_avg, Y_tgt_avg
 
-def calc_metrics(h5_file, metric_names, strip_length=0, MS_f=None, config_f=None, ):
-    if MS_f is None:
-        MS_f = '$HOME/Papers/WestD0/v2/Database/Stat/h5_global_MS.csv'
-        MS_f = os.path.expanduser(MS_f)
+def __warp_r2_score__(tgt, hat, is_feature_wise):
+    """
+    Computes the coefficient of determination (R² score) between the target and prediction.
+
+    Args:
+        tgt (Tensor or array-like): Ground truth target values of shape (N,) or (N, F),
+            where N is the number of samples and F is the number of features.
+        hat (Tensor or array-like): Predicted values of the same shape as `tgt`.
+        feature_wise (bool, optional): If True, computes R² for each feature independently.
+            If False, computes a single aggregated R² score. Default: False.
+
+    Returns:
+        r2 (float or List[float]): A single R² score if `feature_wise=False`,
+        otherwise a list of R² scores for each feature.
+    """
+    if is_feature_wise:
+        r2s = r2_score(tgt, hat, multioutput='raw_values').tolist()
+    else:
+        r2s = r2_score(tgt, hat)
+    return r2s
+
+def __warp_mse_score__(
+    tgt: Union[np.ndarray, list],
+    hat: Union[np.ndarray, list],
+    feature_wise: bool = False
+) -> Union[float, list]:
+    tgt = np.asarray(tgt)
+    hat = np.asarray(hat)
+
+    if feature_wise:
+        return np.mean((hat - tgt) ** 2, axis=0).tolist()
+    return float(np.mean((hat - tgt) ** 2))
+
+def calc_metrics(
+        h5_file, 
+        metric_names, 
+        *,
+        is_feature_wise = False, # if false, will average all the feature to 1      
+        strip_length=0, 
+        MS_f=default_ms_f, 
+        config_f=default_config_f, ):
     MS_df = pd.read_csv(MS_f, index_col=0)
     input_nodes, output_nodes = get_nodes(config_f)   
     output_mean_stds = MS_df.loc[:, output_nodes].to_numpy()  
@@ -69,17 +115,21 @@ def calc_metrics(h5_file, metric_names, strip_length=0, MS_f=None, config_f=None
             Y_hat = Y_hat[strip_length:-strip_length]
             Y_tgt = Y_tgt[strip_length:-strip_length]
     
+    # convert to normalized data.
     Y_hat = (Y_hat - output_mean_stds[0, :]) / output_mean_stds[1, :]
     Y_tgt = (Y_tgt - output_mean_stds[0, :]) / output_mean_stds[1, :]
+    
+    n_features = Y_tgt.shape[1]
     # calc metrics
     if 'r2' in metric_names:
-        r2 = r2_score(Y_tgt, Y_hat)
+        r2 = __warp_r2_score__(Y_tgt, Y_hat, is_feature_wise)
         metrics['r2'] = r2
     if 'mse' in metric_names:
-        mse = np.mean((Y_hat - Y_tgt) ** 2)
+        mse = __warp_mse_score__(Y_tgt, Y_hat, is_feature_wise)
         metrics['mse'] = mse
     metrics['file'] = str(h5_file)
     return metrics
+
 
 
 def scatter_list(r2s_list, plt_func, **kwargs):
@@ -108,9 +158,9 @@ def scatter_list(r2s_list, plt_func, **kwargs):
     return fig
 
 def scatter_r2s(r2s, 
-                sub_gs:gridspec.GridSpec, 
-                ylabel:str, 
-                f_id: int, 
+                sub_gs: gridspec.GridSpec, 
+                ylabel: str, 
+                ax_title: str, 
                 fig):
     """  
     """
@@ -131,16 +181,16 @@ def scatter_r2s(r2s,
     ax1.set_ylim(0, 1)
     sns.histplot(y=r2s, color="b", kde=True, ax=ax1, linewidth=0)
     ax1.set_xlabel("")
-    avg_sim = np.mean(r2s)
-    ax0.set_title(fr"{f_id} Average {ylabel} is {avg_sim:.3f}")
+    # avg_sim = np.mean(r2s)
+    # ax0.set_title(fr"{ax_title} Average {latex_name} is {avg_sim:.3f}")
+    ax0.set_title(fr"{ax_title}")
     return fig
-
 
 def plt_pred_h5(
         h5_file, 
         nodes_name=[r'$\beta_{n}$', r'$\beta_{p}$', 
-                    r'$\beta_{t}$', r'$w_{mhd}$', 
-                    r'$q_0$', r'$q_{95}$'],
+                    r'$\beta_{t}$', r'$W_{mhd}$', 
+                    r'$q_{95}$', r'$q_0$'],
         src_h5 = None,
         heating_nodes = [],
         filter_wz = None, 
@@ -206,12 +256,12 @@ def plt_pred_h5(
     # plt.tight_layout()
     return fig
 
-def plt_h5(h5_file, nodes, ncols = 4):
+def plt_h5(h5_file, 
+           nodes, 
+           ncols = 4,
+           fig_kwargs=dict({}),):
     nodes_num = len(nodes)
     nrows = math.ceil(nodes_num / ncols)
-    fig_kwargs = {"constrained_layout": True,
-                "figsize": (6.8 * ncols, 4.8 * nrows),
-                "dpi": 300}
     lw = 1.5
     alpha = 1
     plt.close('all')
@@ -236,6 +286,35 @@ def plt_h5(h5_file, nodes, ncols = 4):
     fig.suptitle(f'Shot: {shot}')
     # plt.tight_layout()
     return fig
+
+def plt_truncate_h5(src_h5, nodes, filter_wz, *, ncols=2, fig_kwargs):
+    data = get_truncate_src_data(src_h5=src_h5, nodes=nodes, filter_wz=11)
+    X = np.arange(data.shape[0]) / 1000
+    nodes_num = len(nodes)
+    nrows = math.ceil(nodes_num / ncols)
+    lw = 1.5
+    alpha = 1
+    plt.close('all')
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, **fig_kwargs)
+    for node_idx, node in enumerate(nodes):
+        node_data = data[:, node_idx]
+        row_idx = node_idx // ncols
+        col_idx = node_idx % ncols
+        ax = axes[row_idx][col_idx]
+        ax.plot(X, 
+                node_data, 
+                # c='r',
+                lw=lw, alpha=alpha,
+                label=fr'{node}')
+        ax.legend(loc='upper right')
+    shot = os.path.basename(src_h5)
+    shot = shot[:-3]
+    for i in range(ncols):
+        axes[-1][i].set_xlabel('Time [s]')
+    fig.suptitle(f'WEST Discharge: #{shot}')
+    # plt.tight_layout()
+    return fig
+
 
 def get_truncate_src_data(src_h5, nodes, filter_wz, dtype=np.float64):
     with h5py.File(src_h5, mode="r") as hf:
@@ -274,7 +353,7 @@ def plt_pred_h5_vertically(
     h5_file, 
     nodes_name=[r'$\beta_{n}$', r'$\beta_{p}$', 
             r'$\beta_{t}$', r'$W_{mhd}$', 
-            r'$q_0$', r'$q_{95}$'],
+             r'$q_{95}$', r'$q_0$',],
     *, 
     src_h5 = None, 
     hs_in_use = ['LHW'],
@@ -375,6 +454,15 @@ def average_pred_value_ft(src_h5, pred_h5, nodes, filter_wz):
 
         Ip_ref = hf['Ip_scope_0'][()]
         TFStart, TFEnd = data_gen.findTF(Ip_ref, timeAxis)
+        TFStart = IMAS_start
+        TFEnd = IMAS_end
+        # Conclusion is the longer the better ！！！
+
+        # if TFStart < IMAS_start: TFStart = IMAS_start
+        # if TFEnd > IMAS_end: TFEnd = IMAS_end
+        # split_length = (TFEnd - TFStart) / 3 
+        # TFStart = TFStart + split_length
+        # TFEnd = TFEnd
         
         half_filter_wz = filter_wz // 2
         timeAxis = timeAxis[ids]
@@ -391,3 +479,51 @@ def average_pred_value_ft(src_h5, pred_h5, nodes, filter_wz):
             nodes_average_list[0].append(node_mean_hat)
             nodes_average_list[1].append(node_mean_tgt)
     return nodes_average_list
+
+
+def plt_true2pred(tgt_hat, sub_gs, node_name, fig):
+    tgt = tgt_hat[0]
+    hat = tgt_hat[1]
+    x = tgt
+    y = hat
+    
+    xy = np.vstack([tgt, hat])
+    r2 = r2_score(tgt, hat)
+    ax = fig.add_subplot(sub_gs)
+    # density = gaussian_kde(xy)(xy)
+    # sc = ax.scatter(x = tgt, 
+    #             y = hat, 
+    #             # c='tab:blue', 
+    #             c=density,
+    #             alpha=0.8,)
+    counts, xedges, yedges = np.histogram2d(x, y, bins=50)
+    count_values = np.zeros_like(x)
+    for i in range(len(x)):
+        x_idx = np.searchsorted(xedges, x[i]) - 1
+        y_idx = np.searchsorted(yedges, y[i]) - 1
+        count_values[i] = counts[x_idx, y_idx]
+    # vmin, vmax = 0, 15
+    vmin, vmax = 0, count_values.max()
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    sc = ax.scatter(x = tgt, 
+                y = hat, 
+                # c='tab:blue', 
+                c=count_values,
+                norm=norm,
+                alpha=0.8,)
+    # Set equal axis limits
+    lim_min = min(x.min(), y.min())
+    lim_max = max(x.max(), y.max())
+    ax.set_xlim(lim_min, lim_max)
+    ax.set_ylim(lim_min, lim_max)
+
+    x_min, x_max = ax.get_xlim()
+    ax.plot([x_min, x_max], [x_min, x_max], linestyle='dashed', color='red')
+    # ax.text(0, y_mid, fr'$R^2={r2:.3f}$')
+    ax.text(0.1, 0.9, fr'$R^2={r2:.3f}$', transform=ax.transAxes,)
+    cbar = plt.colorbar(sc)
+    cbar.set_label("Count")
+    ax.set_xlabel(fr"True {node_name}")
+    ax.set_ylabel(fr"Prediction {node_name}")
+    ax.set_title(fr"True vs prediction of {node_name}")
+
