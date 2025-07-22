@@ -2,17 +2,22 @@
 # data preparation
 import pathlib
 import os
-from src.data_utils import merge_mat_h5, filter_h5
-from private_modules import save_to_file, parse_args, MpRun
-from private_modules.FedData import stat_node
 from tqdm import tqdm
 import h5py
 import shutil
 import numpy as np
-from src import data_gen
-from src.data_utils import strongest_granger_causality, strongest_z_score, get_nodes
-# from private_modules.utilities import calc_corrcoef
+import matplotlib.pyplot as plt
+import seaborn as sns
 
+from src import data_gen, utils
+from src.data_utils import (strongest_granger_causality, 
+                            strongest_z_score, 
+                            merge_mat_h5, filter_h5)
+from private_modules import strpath2path
+from private_modules import save_to_file, parse_args, MpRun
+from private_modules.FedData import stat_node
+
+figs_dir = pathlib.Path('./Database/ConFigs/')
 def save_merge():
     def warp_merge(shot):
         h5_file = IMASH5_dir.joinpath(f'{shot}.h5')
@@ -94,7 +99,7 @@ def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
 def h5_p_matrix(h5_file, option='gp', maxlag=4):
     filter_wz = 99
     filter_func = data_gen.SMA
-    input_nodes, output_nodes = get_nodes()
+    input_nodes, output_nodes = utils.get_nodes()
     nodes = []
     nodes.extend(input_nodes)
     nodes.extend(output_nodes)
@@ -136,6 +141,47 @@ def mp_h5_p_matrix(num_workers=64, option='gp', maxlag=4):
     p_arr_f = os.path.join(stat_dir, p_arr_f)
     np.save(p_arr_f, p_arr)
 
+def calc_mean_p_matrix(p_matrix_f):
+    p_matrix_list = np.load(p_matrix_f)
+    nrows = p_matrix_list.shape[1]
+    ncols = p_matrix_list.shape[2]
+    p_matrix = np.zeros((nrows, ncols))
+    for i in range(nrows):
+        for j in range(ncols): # only calc non-nan
+            p_matrix[i, j] = np.mean(np.abs(p_matrix_list[:, i, j][~np.isnan(p_matrix_list[:, i, j])]))
+    return p_matrix
+
+def plt_p_matrix(option='gp'):
+    stat_dir = 'Database/Stat'
+    stat_dir = strpath2path(stat_dir)
+    zp_matrix_f = stat_dir.joinpath('p_matrix_zp.npy')
+    gp_matrix_f = stat_dir.joinpath('p_matrix_gp.npy')
+    if option == "gp":
+        gp_matrix = calc_mean_p_matrix(gp_matrix_f)
+        data = gp_matrix
+        title = "(a) Granger causality"
+        fig_name = "granger_causality"
+    elif option == "zp":
+        zp_matrix = calc_mean_p_matrix(zp_matrix_f)
+        data = zp_matrix
+        title = "(b) Postive correlation coefficient"
+        fig_name = "correlation_coefficient"   
+    cmap = sns.color_palette("RdBu_r", as_cmap=True)
+    fig = plt.figure(figsize=(10, 10), dpi=200)
+    # input_nodes, output_nodes = get_nodes()
+    input_nodes, output_nodes = utils.get_render_nodes()
+    sns.heatmap(data, annot=True, fmt=".2e", cmap=cmap,
+                xticklabels=output_nodes, yticklabels=input_nodes[:],
+                # vmin=0, vmax=0.15,
+                linewidths=0.5, linecolor='white',
+                cbar_kws={"label": "Score"})
+    plt.title(f"{title} between input and output signals", fontsize=14)
+    plt.tight_layout()
+    fig_path = figs_dir.joinpath(f"{fig_name}.svg")
+    fig.savefig(fig_path)
+    fig_path = figs_dir.joinpath(f"{fig_name}.pdf")
+    fig.savefig(fig_path)
+    return fig
 
 if __name__ == "__main__":
     args = parse_args()
