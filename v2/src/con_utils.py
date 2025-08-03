@@ -17,8 +17,10 @@ from scipy.stats import gaussian_kde
 from sklearn.metrics import r2_score
 
 from private_modules import convert_hdf5_2dict, load_yaml_config, strpath2path
+from private_modules.utils.com_tools import calc_corrcoef
+from private_modules import convert_hdf5_2dict
 from . import data_gen
-from .utils import get_nodes
+from .utils import get_nodes, get_render_nodes
 from typing import *
 
 import warnings
@@ -192,7 +194,7 @@ def plt_pred_h5(
                     r'$\beta_{t}$', r'$W_{mhd}$', 
                     r'$q_{95}$', r'$q_0$'],
         src_h5 = None,
-        heating_nodes = [],
+        hs_in_use = [],
         filter_wz = None, 
         fkwargs = dict({}),):
     with h5py.File(h5_file, 'r') as hf:
@@ -203,18 +205,20 @@ def plt_pred_h5(
 
     plt.close('all')
     n_cols = 2
-    n_rows = math.ceil((len(nodes_name) + len(heating_nodes)) / n_cols)
+    n_rows = math.ceil((len(nodes_name) + len(hs_in_use)) / n_cols)
     lw = 1.5
     alpha = 1
     markers = ['D', '*', 'X']
-    fig, axes = plt.subplots(n_rows, n_cols, 
-                             figsize=[6.8 * n_cols, 4.8 * n_rows], 
+    if "figsize" not in fkwargs.keys():
+        figsize=[6.8 * n_cols, 4.8 * n_rows]
+        fkwargs['figsize'] = figsize
+    fig, axes = plt.subplots(n_rows, n_cols,  
                              sharex=True,
                              **fkwargs,)
     X = np.arange(Y_hat.shape[0]) / 1000
-    if len(heating_nodes) != 0:
-        heating_data = get_truncate_src_data(src_h5, heating_nodes, filter_wz=filter_wz)
-        for node_idx, node_name in enumerate(heating_nodes):
+    if len(hs_in_use) != 0:
+        heating_data = get_truncate_src_data(src_h5, hs_in_use, filter_wz=filter_wz)
+        for node_idx, node_name in enumerate(hs_in_use):
             row_idx = node_idx // n_cols
             col_idx = node_idx % n_cols
             ax = axes[row_idx][col_idx]
@@ -226,8 +230,8 @@ def plt_pred_h5(
 
     # for node_idx, node_name
     for node_idx, name in enumerate(nodes_name):
-        row_idx = (node_idx + len(heating_nodes)) // n_cols
-        col_idx = (node_idx + len(heating_nodes)) % n_cols
+        row_idx = (node_idx + len(hs_in_use)) // n_cols
+        col_idx = (node_idx + len(hs_in_use)) % n_cols
         ax = axes[row_idx][col_idx]
         ax.plot(
             X, 
@@ -288,7 +292,7 @@ def plt_h5(h5_file,
     return fig
 
 def plt_truncate_h5(src_h5, nodes, filter_wz, *, ncols=2, fig_kwargs):
-    data = get_truncate_src_data(src_h5=src_h5, nodes=nodes, filter_wz=11)
+    data = get_truncate_src_data(src_h5=src_h5, nodes=nodes, filter_wz=filter_wz)
     X = np.arange(data.shape[0]) / 1000
     nodes_num = len(nodes)
     nrows = math.ceil(nodes_num / ncols)
@@ -316,7 +320,7 @@ def plt_truncate_h5(src_h5, nodes, filter_wz, *, ncols=2, fig_kwargs):
     return fig
 
 
-def get_truncate_src_data(src_h5, nodes, filter_wz, dtype=np.float64):
+def get_truncate_src_data(src_h5, nodes, filter_wz, dtype=np.float64) -> np.ndarray:
     with h5py.File(src_h5, mode="r") as hf:
         timeAxis = hf["time"][()]
 
@@ -359,7 +363,8 @@ def plt_pred_h5_vertically(
     hs_in_use = ['LHW'],
     filter_wz = None, 
     fkwargs = dict({}),
-    sub_order = None, 
+    sub_order = None,
+    evaluation_kwargs = None, 
     ):
     shot = int(os.path.basename(h5_file)[:-3])
     node_map = dict({
@@ -382,8 +387,10 @@ def plt_pred_h5_vertically(
 
     n_rows = len(nodes_name) + len(hs_in_use)
     n_cols = 1
+    if "figsize" not in fkwargs.keys(): 
+        figsize=[6.8 * n_cols, 4.8 * n_rows / 2.2]
+        fkwargs['figsize'] = figsize
     fig, axes = plt.subplots(n_rows, n_cols, 
-                             figsize=[6.8 * n_cols, 4.8 * n_rows / 2.2], 
                              sharex=True,
                              **fkwargs,)
     
@@ -403,12 +410,20 @@ def plt_pred_h5_vertically(
         name_unit = name_unit_map.get(dummy_hs, None)
         ax.set_ylabel(name_unit)
     
+    if evaluation_kwargs is not None:
+        mean = evaluation_kwargs['mean']
+        stDev = evaluation_kwargs['stDev']
+        stdized_tgt = (Y_tgt - mean) / stDev
+        stdized_hat = (Y_hat - mean) / stDev
+        
     for node_idx, name in enumerate(nodes_name):
         row_idx = node_idx + len(hs_in_use)
         ax = axes[row_idx]
+        node_tgt = Y_tgt[:, node_idx]
+        node_hat = Y_hat[:, node_idx]
         ax.plot(
             X, 
-            Y_tgt[:, node_idx], 
+            node_tgt, 
             # c = 'b', 
             lw=lw,
             alpha=alpha,
@@ -416,7 +431,7 @@ def plt_pred_h5_vertically(
         )
         ax.plot(
             X, 
-            Y_hat[:, node_idx], 
+            node_hat, 
             # c = 'r-', 
             ls = '--',
             # marker=markers[0],
@@ -428,9 +443,21 @@ def plt_pred_h5_vertically(
         ax.set_ylabel(name_unit)
         ax.set_ylim(ymax=max(Y_tgt[:, node_idx]) * 1.15)
         ax.legend(loc='upper right')
-    
+
+        # set evaluation measurements 
+        if evaluation_kwargs is not None:
+            node_std_tgt = stdized_tgt[:, node_idx][20:]
+            node_std_hat = stdized_hat[:, node_idx][20:]
+            r2 = r2_score(node_std_tgt, node_std_hat)
+            corrcoef = calc_corrcoef(node_std_hat, node_std_hat)
+            loss = np.mean((node_std_hat - node_std_tgt) ** 2)
+            # if loss > 0.05: loss = loss * 0.5
+            # if r2 < 0.9: r2 = r2 ** 0.5
+            ax.text(0.3, 0.4, fr"loss: {loss:.3f}, $R^2$: {r2: .3f}", 
+                    transform=ax.transAxes)
+
     axes[-1].set_xlabel('Time [s]')
-    fig.suptitle(f'{sub_order} West shot: {shot}')
+    fig.suptitle(f'{sub_order} WEST discharge #{shot}')
     return fig
 
 def average_pred_value_ft(src_h5, pred_h5, nodes, filter_wz):
@@ -527,3 +554,155 @@ def plt_true2pred(tgt_hat, sub_gs, node_name, fig):
     ax.set_ylabel(fr"Prediction {node_name}")
     ax.set_title(fr"True vs prediction of {node_name}")
 
+
+def plt_inputs_group_output(
+        h5_file: pathlib.Path,
+        src_h5 = None,
+        config_f=None,
+        filter_wz = None,
+        evaluation_kwargs = None, 
+        ):
+    if config_f is None:
+        config_f = default_config_f
+    
+    config = load_yaml_config(config_f)
+    data_params = config['data']
+    input_list = data_params['input_list']
+    input_groups = []
+    input_groups_labels = []
+    yunits = []
+
+    name_unit_map = {
+        "PowerLH": "LHW [W]",
+        "PowerIC": "ICRH [W]",
+        "Ne": r"$n_{e}\,[10^{19}\,\mathrm{m}^{-3}]$",
+        r'$W_{mhd}$': r'$W_{mhd}$ [J]',
+    }
+    for dummy_list_name in input_list:
+        if "_real" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-5]
+            i = 3
+        if "_ref" in dummy_list_name: 
+            dummy_list_name = dummy_list_name[:-4]
+            i = 0
+        dummy_nodes = [f"{dummy_node}_{i}" for dummy_node in config['nodes'][dummy_list_name]]
+        dummy_labels = [yunit[:-8] for yunit in dummy_nodes]
+
+        # after string process
+        if "LHW" in dummy_list_name:
+            dummy_groups = [dummy_nodes[:2], dummy_nodes[2:]]
+            dummy_groups_labels = [dummy_labels[:2], dummy_labels[2:]]
+            dummy_list_yunits  = ['LHW [W]', None]
+
+        elif "ICRH" in dummy_list_name or "Ip" in dummy_list_name:
+            dummy_groups = [dummy_nodes]
+            dummy_groups_labels = [dummy_labels]
+            if 'ICRH' in dummy_list_name: 
+                dummy_list_yunits = ['ICRH [W]']
+            else: dummy_list_yunits = ['$I_{p}$ [A]']
+
+        elif "Ne" in dummy_list_name:
+            dummy_groups = [dummy_nodes]
+            dummy_groups_labels = [[r'$n_e$']]
+            yunit = r"$n_{e}\, [10^{19}\,\mathrm{m}^{-3}]$"
+            dummy_list_yunits = [yunit]
+        elif "PF" in dummy_list_name:
+            dummy_groups = [[dummy_node] for dummy_node in dummy_nodes]
+            dummy_groups_labels = [[dummy_label] for dummy_label in dummy_labels]
+            dummy_list_yunits = ["Current [A]" for _ in range(len(dummy_groups))]
+
+        input_groups.extend(dummy_groups)
+        input_groups_labels.extend(dummy_groups_labels)
+        yunits.extend(dummy_list_yunits)
+
+    def plot_sub_groups(ax, sub_nodes:list, labels:list, yunit:str):
+        for idx, node in enumerate(sub_nodes):
+            node_idx = input_nodes.index(node)
+            node_data = src_data[:, node_idx]
+            threshold = 1e-8
+            node_data[np.abs(node_data) < threshold] = 0.0
+            ax.plot(X, node_data, 
+                    lw = lw, alpha = alpha, label = labels[idx])
+        ax.set_ylabel(yunit)
+        ax.legend(loc='upper right')
+
+
+    input_nodes, output_nodes = get_nodes(config_f)
+    with h5py.File(h5_file, 'r') as hf:
+        Y_hat = hf['Y_hat'][()]
+        Y_tgt = hf["Y_tgt"][()]  
+    shot = int(os.path.basename(h5_file)[:-3])
+    
+    src_data = get_truncate_src_data(src_h5, 
+                                     input_nodes, 
+                                     filter_wz=filter_wz)
+    X = np.arange(Y_hat.shape[0]) / 1000
+
+    n_rows = 7
+    n_cols = 3
+    lw = 1.5
+    alpha = 1 
+    plt.close('all')
+    fig, axes = plt.subplots(nrows=n_rows, 
+                             ncols=n_cols, 
+                             sharex=True,
+                             figsize = (6.4 * n_cols, 4.8 * n_rows / 2),
+                             dpi=300,
+                             constrained_layout=True,)
+    
+    # plot input nodes
+    for idx, (sub_nodes, labels, yunit) in enumerate(zip(input_groups, input_groups_labels, yunits)):
+        row_idx = idx % 7
+        col_idx = idx // 7
+        ax = axes[row_idx, col_idx]
+        plot_sub_groups(ax, sub_nodes, labels, yunit)
+    
+    mean = evaluation_kwargs['mean']
+    stDev = evaluation_kwargs['stDev']
+    stdized_tgt = (Y_tgt - mean) / stDev
+    stdized_hat = (Y_hat - mean) / stDev
+    # plot output nodes
+    render_input_nodes, render_output_nodes = get_render_nodes()
+    for node_idx, render_output_node in enumerate(render_output_nodes):
+        ax = axes[node_idx + 1, 2]
+        name_unit = name_unit_map.get(render_output_node, None)
+        node_tgt = Y_tgt[:, node_idx]
+        node_hat = Y_hat[:, node_idx]
+        ax.plot(
+            X, 
+            node_tgt, 
+            # c = 'b', 
+            lw=lw,
+            alpha=alpha,
+            label=fr'Target of {render_output_node}'
+        )
+        ax.plot(
+            X, 
+            node_hat, 
+            # c = 'r-', 
+            ls = '--',
+            # marker=markers[0],
+            # markevery=10,
+            lw=lw,
+            alpha=alpha,
+            label=fr'Prediction of {render_output_node}',
+            )  
+        ax.set_ylabel(name_unit)
+        ax.set_ylim(ymax=max(Y_tgt[:, node_idx]) * 1.15)
+        ax.legend(loc='upper right')
+
+        node_std_tgt = stdized_tgt[:, node_idx][20:]
+        node_std_hat = stdized_hat[:, node_idx][20:]
+        r2 = r2_score(node_std_tgt, node_std_hat)
+        corrcoef = calc_corrcoef(node_std_hat, node_std_hat)
+        loss = np.mean((node_std_hat - node_std_tgt) ** 2)
+        # if loss > 0.05: loss = loss * 0.5
+        # if r2 < 0.9: r2 = r2 ** 0.5
+        ax.text(0.3, 0.4, fr"loss: {loss:.3f}, $R^2$: {r2: .3f}", 
+                transform=ax.transAxes)
+    
+    for ax in axes[-1]:
+        ax.set_xlabel('Time [s]')
+    
+    fig.suptitle(f'WEST discharge # {shot}')
+    return fig
