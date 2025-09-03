@@ -152,6 +152,7 @@ def calc_mean_p_matrix(p_matrix_f):
     return p_matrix
 
 def plt_p_matrix(option='gp'):
+    plt.style.use('seaborn-v0_8-poster')
     stat_dir = 'Database/Stat'
     stat_dir = strpath2path(stat_dir)
     zp_matrix_f = stat_dir.joinpath('p_matrix_zp.npy')
@@ -174,7 +175,8 @@ def plt_p_matrix(option='gp'):
                 xticklabels=output_nodes, yticklabels=input_nodes[:],
                 # vmin=0, vmax=0.15,
                 linewidths=0.5, linecolor='white',
-                cbar_kws={"label": "Score"})
+                cbar_kws={"label": "Score"},
+                annot_kws={"size": 'large'})
     plt.title(f"{title} between input and output signals", fontsize=14)
     plt.tight_layout()
     fig_path = figs_dir.joinpath(f"{fig_name}.pdf")
