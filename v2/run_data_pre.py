@@ -16,6 +16,7 @@ from src.data_utils import (strongest_granger_causality,
 from private_modules import strpath2path
 from private_modules import save_to_file, parse_args, MpRun
 from private_modules.FedData import stat_node
+import math
 
 figs_dir = pathlib.Path('./Database/ConFigs/')
 def save_merge():
@@ -71,7 +72,6 @@ def clear_h5():
     mp_run = MpRun(num_workers=10)
     mp_run.mp_no_return_run_func(warp_clean, h5s)    
 
-
 def calc_gp(input_arr, output_arr, node_flags, option="gp", maxlag=4,):
     input_dim = input_arr.shape[1] # in our case is 19
     output_dim = output_arr.shape[1] # in our case is 6
@@ -111,7 +111,7 @@ def h5_p_matrix(h5_file, option='gp', maxlag=4):
     input_dim = len(input_nodes)
     input_arr = data[:, :input_dim]
     output_arr = data[:, input_dim:]
-    p_matrix = calc_gp(input_arr, output_arr, node_flags, option=option)
+    p_matrix = calc_gp(input_arr, output_arr, node_flags, option=option, maxlag=maxlag)
     return p_matrix
 
 def mp_h5_p_matrix(num_workers=64, option='gp', maxlag=4):
@@ -164,7 +164,7 @@ def plt_p_matrix(option='gp'):
     elif option == "zp":
         zp_matrix = calc_mean_p_matrix(zp_matrix_f)
         data = zp_matrix
-        title = "(b) Postive correlation coefficient"
+        title = "(b) Absolute correlation coefficient"
         fig_name = "correlation_coefficient"   
     cmap = sns.color_palette("RdBu_r", as_cmap=True)
     fig = plt.figure(figsize=(10, 10), dpi=200)
@@ -177,11 +177,39 @@ def plt_p_matrix(option='gp'):
                 cbar_kws={"label": "Score"})
     plt.title(f"{title} between input and output signals", fontsize=14)
     plt.tight_layout()
-    fig_path = figs_dir.joinpath(f"{fig_name}.svg")
-    fig.savefig(fig_path)
     fig_path = figs_dir.joinpath(f"{fig_name}.pdf")
     fig.savefig(fig_path)
     return fig
+
+def plt_nodes_comparsion():
+    shot = 57869
+    input_nodes, output_nodes = utils.get_nodes()
+    plot_nodes = ['Vloop_scope_3']
+    plot_nodes.extend(output_nodes)
+    data_dir = "$HOME/DATABASE/DataBase/WEST/WestData"
+    data_dir = strpath2path(data_dir)
+    h5_file = data_dir.joinpath(f"{shot}.h5")
+    collect_data = []
+    with h5py.File(h5_file, 'r') as hf:
+        for node in plot_nodes:
+            node_data = hf[node][()]
+            collect_data.append(node_data)
+    plt.close('all')
+    n_cols = 3
+    n_rows = math.ceil(len(plot_nodes) / n_cols)
+    fig, axes = plt.subplots(
+        nrows=n_rows, ncols=n_cols, 
+        figsize=(6.4 * n_cols, 4.8 * n_rows), 
+        )
+
+    axes = np.atleast_1d(axes).flatten()
+    for i, (ax, sub_data) in enumerate(zip(axes, collect_data)):
+        X = np.arange(len(sub_data)) / 1000
+        ax.plot(X[2000:4000], sub_data[2000:4000])
+        ax.set_title(plot_nodes[i])
+    fig.suptitle(fr'WEST discharge #{shot}')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.savefig(figs_dir.joinpath(f'{shot}-output_comparsion.pdf'))
 
 if __name__ == "__main__":
     args = parse_args()
