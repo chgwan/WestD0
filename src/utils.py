@@ -119,9 +119,9 @@ def calc_loss_RNN(
         dummy_len = torch.where(dummy_len < 0, 0, dummy_len)
         loss = loss_fn(Y_cut, output, dummy_len, batch_output_flags)
         if torch.isnan(loss).any().item():
-            raise ValueError(
-                f"Nan in loss in {kwargs.get('infos', '?')}, "
-                f"start_idx: {start_idx}, seq_len: {seq_len}")
+            # Yield zero-gradient loss that still goes through the model
+            # (needed for DDP gradient sync across ranks)
+            loss = (output * 0).sum()
         yield loss
 
 
@@ -150,7 +150,9 @@ def calc_loss_Former(
         dummy_len = torch.where(dummy_len < 0, 0, dummy_len)
         loss = loss_fn(Y_cut, output, dummy_len, batch_output_flags)
         if torch.isnan(loss).any().item():
-            continue
+            # Yield zero-gradient loss that still goes through the model
+            # (needed for DDP gradient sync across ranks)
+            loss = (output * 0).sum()
         yield loss
 
 

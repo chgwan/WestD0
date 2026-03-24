@@ -90,11 +90,9 @@ class _BaseH5(Data.IterableDataset):
         if worker_info is None:
             iter_h5s = self.h5_list
         else:
-            per_worker = int(math.ceil(self.h5s_len / float(worker_info.num_workers)))
-            worker_id = worker_info.id
-            iter_start = per_worker * worker_id
-            iter_end = min(iter_start + per_worker, len(self.h5_list))
-            iter_h5s = self.h5_list[iter_start:iter_end]
+            # Use divmod for balanced splits (matches _evenly_split)
+            parts = _evenly_split(self.h5_list, worker_info.num_workers)
+            iter_h5s = parts[worker_info.id]
         return self._gen(iter_h5s)
 
     def _gen(self, iter_h5s):
@@ -174,12 +172,13 @@ def _train_split(src, split_ratio):
 
 
 def _evenly_split(src, n):
-    result = []
-    chunk = math.ceil(len(src) / n)
+    """Split *src* into *n* parts of equal length (last part may be shorter by at most 1)."""
+    q, r = divmod(len(src), n)
+    result, start = [], 0
     for i in range(n):
-        s = i * chunk
-        e = min(s + chunk, len(src))
-        result.append(src[s:e])
+        size = q + (1 if i < r else 0)
+        result.append(src[start:start + size])
+        start += size
     return result
 
 
