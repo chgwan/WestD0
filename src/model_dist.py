@@ -11,6 +11,7 @@ import datetime
 import threading
 
 import natsort
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch import distributed as dist
@@ -209,6 +210,7 @@ class ModelTrainTruncatedRNN:
 
         if world_rank == 0 and logger is not None:
             logger.log(metrics)
+        return metrics
 
     # ── entry point (called once per torchrun process) ────────────────
 
@@ -249,13 +251,21 @@ class ModelTrainTruncatedRNN:
             if scheduler is not None and 'scheduler' in ckpt:
                 scheduler.load_state_dict(ckpt['scheduler'])
 
+        all_metrics = []
         for epoch in range(start_epoch, self.num_epochs + 1):
-            self._epoch_train(world_rank, epoch, model, optimizer, scheduler,
-                              train_loader, val_loader, logger)
+            metrics = self._epoch_train(world_rank, epoch, model, optimizer,
+                                        scheduler, train_loader, val_loader,
+                                        logger)
+            all_metrics.append(metrics)
 
         if logger is not None:
             logger.close()
         dist.destroy_process_group()
+
+        if world_rank == 0:
+            result_df = pd.DataFrame.from_records(all_metrics)
+            result_df.to_csv(self.train_base_dir / 'train_results.csv')
+            return result_df
 
 
 # ---------------------------------------------------------------------------
