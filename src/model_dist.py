@@ -110,22 +110,21 @@ class ModelTrainTruncatedRNN:
                          disable=(world_rank != 0))
         ddp_loss = torch.zeros(2).cuda()
 
-        with model.join():
-            for data in train_loader:
-                X, Y = data[0].float().cuda(), data[1].float().cuda()
-                Y_len, Y_flags = data[2].int().cuda(), data[3].int().cuda()
-                infos = data[-1]
-                loss_gen = loss_fn(model, X, Y, Y_len, Y_flags, None,
-                                   infos=infos, **self.kwargs)
-                for loss in loss_gen:
-                    optimizer.zero_grad(set_to_none=True)
-                    loss.backward()
-                    optimizer.step()
-                    ddp_loss[0] += loss.detach().item()
-                    ddp_loss[1] += 1
-                if scheduler is not None:
-                    scheduler.step()
-                train_bar.update()
+        for data in train_loader:
+            X, Y = data[0].float().cuda(), data[1].float().cuda()
+            Y_len, Y_flags = data[2].int().cuda(), data[3].int().cuda()
+            infos = data[-1]
+            loss_gen = loss_fn(model, X, Y, Y_len, Y_flags, None,
+                               infos=infos, **self.kwargs)
+            for loss in loss_gen:
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+                ddp_loss[0] += loss.detach().item()
+                ddp_loss[1] += 1
+            if scheduler is not None:
+                scheduler.step()
+            train_bar.update()
         train_bar.close()
         dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
         return (ddp_loss[0] / ddp_loss[1]).item()
@@ -138,19 +137,22 @@ class ModelTrainTruncatedRNN:
                        desc=f"Rank {world_rank} epoch: {epoch}/{self.num_epochs} validating",
                        disable=(world_rank != 0))
         ddp_loss = torch.zeros(2).cuda()
+        # Use unwrapped model for eval — no DDP gradient sync needed
+        raw_model = model.module if hasattr(model, 'module') else model
+        raw_model.eval()
 
-        with torch.no_grad(), model.join():
+        with torch.no_grad():
             for data in val_loader:
                 X, Y = data[0].float().cuda(), data[1].float().cuda()
                 Y_len, Y_flags = data[2].int().cuda(), data[3].int().cuda()
                 infos = data[4]
-                loss_gen = loss_fn(model, X, Y, Y_len, Y_flags,
+                loss_gen = loss_fn(raw_model, X, Y, Y_len, Y_flags,
                                    infos=infos, **self.kwargs)
                 for loss in loss_gen:
                     ddp_loss[0] += loss.item()
                     ddp_loss[1] += 1
                 val_bar.update()
-            val_bar.close()
+        val_bar.close()
         dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
         return (ddp_loss[0] / ddp_loss[1]).item()
 

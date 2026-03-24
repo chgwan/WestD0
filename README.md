@@ -6,7 +6,7 @@ This repository contains the code for the paper:
 >
 > Chenguang Wan, Feda Almuhisen\*, Philippe Moreau, Remy Nouailletas, Zhisong Qu\*, Youngwoo Cho, Robin Varennes, Kyungtak Lim, Kunpeng Li, Jia Huang, Weidong Chen, Jiangang Li, Xavier Garbet and WEST Team
 >
-> Published 3 March 2026, doi: 10.1088/1741-4326/ae4917
+> Published 3 March 2026, DOI: [10.1088/1741-4326/ae4917](https://doi.org/10.1088/1741-4326/ae4917)
 
 ## Overview
 
