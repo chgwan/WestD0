@@ -12,6 +12,7 @@ import threading
 
 import natsort
 import torch
+import torch.nn.functional as F
 from torch import distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
@@ -103,28 +104,39 @@ class ModelTrainTruncatedRNN:
     def _model_train(self, epoch, model, train_loader, optimizer, scheduler):
         model.train()
         loss_fn = self.loss_fn
-        train_steps = len(train_loader) + (train_loader.num_workers - 1)
+        train_steps = len(train_loader)
         world_rank = dist.get_rank()
         train_bar = tqdm(total=train_steps,
                          desc=f"Rank {world_rank} epoch: {epoch}/{self.num_epochs} training",
                          disable=(world_rank != 0))
         ddp_loss = torch.zeros(2).cuda()
+        with model.join():
+            for data in train_loader:
+                X, Y = data[0].float().cuda(), data[1].float().cuda()
+                Y_len, Y_flags = data[2].int().cuda(), data[3].int().cuda()
+                infos = data[-1]
 
-        for data in train_loader:
-            X, Y = data[0].float().cuda(), data[1].float().cuda()
-            Y_len, Y_flags = data[2].int().cuda(), data[3].int().cuda()
-            infos = data[-1]
-            loss_gen = loss_fn(model, X, Y, Y_len, Y_flags, None,
-                               infos=infos, **self.kwargs)
-            for loss in loss_gen:
-                optimizer.zero_grad(set_to_none=True)
-                loss.backward()
-                optimizer.step()
-                ddp_loss[0] += loss.detach().item()
-                ddp_loss[1] += 1
-            if scheduler is not None:
-                scheduler.step()
-            train_bar.update()
+                # Sync max seq length so all ranks do the same number of slices
+                global_max_len = torch.max(Y_len).clone()
+                dist.all_reduce(global_max_len, op=dist.ReduceOp.MAX)
+                pad_len = int(global_max_len.item()) - X.shape[1]
+                if pad_len > 0:
+                    X = F.pad(X, (0, 0, 0, pad_len))
+                    Y = F.pad(Y, (0, 0, 0, pad_len))
+                    Y_len = Y_len.clone()
+                    Y_len[0] = global_max_len.int()
+
+                loss_gen = loss_fn(model, X, Y, Y_len, Y_flags, None,
+                                   infos=infos, **self.kwargs)
+                for loss in loss_gen:
+                    optimizer.zero_grad(set_to_none=True)
+                    loss.backward()
+                    optimizer.step()
+                    ddp_loss[0] += loss.detach().item()
+                    ddp_loss[1] += 1
+                if scheduler is not None:
+                    scheduler.step()
+                train_bar.update()
         train_bar.close()
         dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
         return (ddp_loss[0] / ddp_loss[1]).item()
@@ -132,7 +144,7 @@ class ModelTrainTruncatedRNN:
     def _eval(self, epoch, model, val_loader):
         loss_fn = self.loss_fn
         world_rank = dist.get_rank()
-        val_steps = len(val_loader) + (val_loader.num_workers - 1)
+        val_steps = len(val_loader)
         val_bar = tqdm(total=val_steps,
                        desc=f"Rank {world_rank} epoch: {epoch}/{self.num_epochs} validating",
                        disable=(world_rank != 0))
@@ -140,7 +152,6 @@ class ModelTrainTruncatedRNN:
         # Use unwrapped model for eval — no DDP gradient sync needed
         raw_model = model.module if hasattr(model, 'module') else model
         raw_model.eval()
-
         with torch.no_grad():
             for data in val_loader:
                 X, Y = data[0].float().cuda(), data[1].float().cuda()
@@ -267,7 +278,7 @@ class ModelInferRNN:
     def _model_infer(self, model, infer_loader):
         model.eval()
         ddp_loss = torch.zeros(2).cuda()
-        infer_steps = len(infer_loader) + (infer_loader.num_workers - 1)
+        infer_steps = len(infer_loader)
         world_rank = dist.get_rank()
         infer_bar = tqdm(total=infer_steps, desc=f'Rank {world_rank} model inferring',
                          disable=(world_rank != 0))
