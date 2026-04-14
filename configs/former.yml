@@ -1,0 +1,40 @@
+# WEST D0 — Transformer (Former) experiment config
+# Inherits node definitions and data settings from base.yml
+data: 
+  filter_wz: 11
+# ── Model ───────────────────────────────────────────────────────────────────
+model:
+  name: Former
+  input_dim: 19
+  embed_dim: 16
+  output_dim: 6
+  window_size: 1024
+  step_size: 512
+  num_heads: 8
+  num_layers: 2
+  dropout_rate: 0.1
+  noise_ratio: 0.1
+
+# ── Training ────────────────────────────────────────────────────────────────
+train:
+  num_epochs: 30
+  random_seed: 3407
+  train_type: "train"
+  is_output_filter: False
+  num_trials: 50
+
+# ── Optimizer ───────────────────────────────────────────────────────────────
+optimizer:
+  name: torch.optim.SGD
+  scheduler: None
+  lr: 1e-3
+  weight_decay: 0
+
+# ── Checkpointing & evaluation ─────────────────────────────────────────────
+summary:
+  root_dir: "ProjDB/Former_11_shuffle"
+  save_ckpt: True
+  eval_interval_epochs: 1
+  save_checkpoint_steps: 1
+  keep_checkpoint_max: 10
+  checkpoint_path: "ProjDB/Former_11_shuffle/Log"
