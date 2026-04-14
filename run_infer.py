@@ -22,7 +22,7 @@ import pandas as pd
 
 from src import data_gen, mlmodels, model_dist
 from src.utils import load_yaml_config, deep_merge, screen_print, random_init
-from src.utils import calc_loss_Former, calc_loss_RNN
+from src.utils import inference_fn
 from src.proj_config import get_proj_config
 from run_data_pre import get_nodes
 
@@ -37,14 +37,6 @@ MODEL_MAP = {
     "Former": mlmodels.WestFormer,
     "ERT": mlmodels.WestERT,
     "GPT": mlmodels.WestGPT,
-}
-
-LOSS_MAP = {
-    "MLP": calc_loss_Former,
-    "FastLSTM": calc_loss_RNN,
-    "Former": calc_loss_Former,
-    "ERT": calc_loss_Former,
-    "GPT": calc_loss_Former,
 }
 
 
@@ -142,7 +134,6 @@ def main():
 
     # Build and load model
     model_fn = MODEL_MAP[model_name]
-    loss_fn = LOSS_MAP[model_name]
     model = model_fn(**model_params)
     model = _load_model(model, ckpt_path)
 
@@ -163,22 +154,18 @@ def main():
     data_loaders = my_data_gen.sp_ratio_wz()
     infer_loaders = data_loaders[2]  # test split
 
-    # Wrap loss_fn for infer_fn interface
-    def infer_fn(model, X, Y, batch_len, batch_flags, infos, **kwargs):
-        loss_gen = loss_fn(model, X, Y, batch_len, batch_flags, None,
-                           infos=infos, **kwargs)
-        total_loss = torch.tensor(0.0).cuda()
-        count = 0
-        for loss in loss_gen:
-            total_loss += loss.detach()
-            count += 1
-        return total_loss / max(count, 1)
+    # Prepare denormalization arrays for inference_fn
+    nodes = input_nodes + output_nodes
+    mean = MS_df.loc['mean', nodes].to_numpy()[-len(output_nodes):]
+    stDev = MS_df.loc['stDev', nodes].to_numpy()[-len(output_nodes):]
 
-    my_model_infer = model_dist.ModelInferRNN(
-        infer_loaders, infer_fn,
-        world_size=world_size,
+    my_model_infer = model_dist.ModelInfer(
+        infer_loaders, inference_fn,
         hat_data_dir=str(pred_dir),
-        **model_params,
+        step_size=model_params['step_size'],
+        window_size=model_params['window_size'],
+        mean=mean,
+        stDev=stDev,
     )
     my_model_infer.run_infer(model)
 

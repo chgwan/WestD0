@@ -272,17 +272,11 @@ class ModelTrainTruncatedRNN:
 # Distributed inference
 # ---------------------------------------------------------------------------
 
-class ModelInferRNN:
-    def __init__(self, infer_loaders, infer_fn=None, world_size=1, **kwargs):
+class ModelInfer:
+    def __init__(self, infer_loaders, infer_fn, **kwargs):
         self.infer_loaders = infer_loaders
         self.infer_fn = infer_fn
-        self.world_size = world_size
         self.kwargs = kwargs
-
-        hat_data_dir = kwargs['hat_data_dir']
-        res_path = os.path.join(hat_data_dir, 'result.csv')
-        with open(res_path, 'a') as f:
-            f.write("loss, file_name\n")
 
     @torch.no_grad()
     def _model_infer(self, model, infer_loader):
@@ -290,7 +284,7 @@ class ModelInferRNN:
         ddp_loss = torch.zeros(2).cuda()
         infer_steps = len(infer_loader)
         world_rank = dist.get_rank()
-        infer_bar = tqdm(total=infer_steps, desc=f'Rank {world_rank} model inferring',
+        infer_bar = tqdm(total=infer_steps, desc=f'Rank {world_rank} inferring',
                          disable=(world_rank != 0))
 
         for data in infer_loader:
@@ -310,7 +304,15 @@ class ModelInferRNN:
     def run_infer(self, model):
         world_rank, _ = _setup_dist(timeout_s=180)
 
-        model = _setup_model(model)
+        # Write result.csv header on rank 0 only, overwrite any previous run
+        hat_data_dir = self.kwargs['hat_data_dir']
+        if world_rank == 0:
+            res_path = os.path.join(hat_data_dir, 'result.csv')
+            with open(res_path, 'w') as f:
+                f.write("loss, file_name\n")
+        dist.barrier()
+
+        model.cuda()
         infer_loader = self.infer_loaders[world_rank]
         loss = self._model_infer(model, infer_loader)
 
